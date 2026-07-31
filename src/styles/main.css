@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
+
+.ifmpp-root {
+  font-family: 'Source Sans 3', system-ui, sans-serif;
+  color: #1e3b35;
+}
+
+.ifmpp-root h1,
+.ifmpp-root h2,
+.ifmpp-root h3 {
+  font-family: 'Fraunces', Georgia, serif;
+}

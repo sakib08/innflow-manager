@@ -1,0 +1,29 @@
+{
+  "name": "innflow-manager",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i ./src/styles/main.css -o ./assets/dist/admin.css --minify && cp ./assets/dist/admin.css ./assets/dist/frontend.css",
+    "build:js": "node esbuild.config.mjs",
+    "build": "mkdir -p assets/dist && npm run build:css && npm run build:js",
+    "watch:css": "tailwindcss -i ./src/styles/main.css -o ./assets/dist/admin.css --watch",
+    "watch:js": "node esbuild.config.mjs --watch",
+    "dev": "npm run build && npm run watch:js",
+    "plugin-zip": "node scripts/package-plugin.mjs",
+    "dist": "npm run plugin-zip"
+  },
+  "dependencies": {
+    "@headlessui/react": "^2.2.0",
+    "@heroicons/react": "^2.2.0",
+    "clsx": "^2.1.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/forms": "^0.5.9",
+    "autoprefixer": "^10.4.20",
+    "esbuild": "^0.24.2",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17"
+  }
+}
