@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
- * Build production assets and create a distributable plugin ZIP.
+ * Build production assets and create a WordPress.org–ready plugin ZIP.
  *
  * Usage:
  *   npm run plugin-zip
- *   node scripts/package-plugin.mjs
  *   node scripts/package-plugin.mjs --skip-build
+ *
+ * ZIP is written to ../innflow-manager-builds/ (outside the plugin folder).
+ * Source for minified JS/CSS is published at the GitHub URL in readme.txt.
  */
 import { spawnSync } from 'child_process';
 import fs from 'fs';
@@ -49,7 +51,7 @@ function ensureZipAvailable() {
 }
 
 const version = readVersion();
-const outDir = path.join( root, 'dist' );
+const outDir = path.resolve( root, '..', 'innflow-manager-builds' );
 const zipName = `${pluginSlug}-${version}.zip`;
 const zipPath = path.join( outDir, zipName );
 const stagingRoot = path.join( outDir, '_staging' );
@@ -84,11 +86,11 @@ fs.rmSync( stagingRoot, { recursive: true, force: true } );
 fs.mkdirSync( stagingPlugin, { recursive: true } );
 fs.mkdirSync( outDir, { recursive: true } );
 
+// Production plugin only. JS/CSS source is linked from readme.txt (== Source code ==).
 const includePaths = [
 	'innflow-manager.php',
 	'hotel-booking.php',
 	'readme.txt',
-	'README.md',
 	'includes',
 	'assets/dist',
 ];
@@ -110,6 +112,11 @@ if ( fs.existsSync( zipPath ) ) {
 run( 'zip', [ '-r', '-q', zipPath, pluginSlug ], { cwd: stagingRoot } );
 fs.rmSync( stagingRoot, { recursive: true, force: true } );
 
+const legacyDist = path.join( root, 'dist' );
+if ( fs.existsSync( legacyDist ) ) {
+	fs.rmSync( legacyDist, { recursive: true, force: true } );
+}
+
 const sizeKb = Math.round( fs.statSync( zipPath ).size / 1024 );
-console.log( `Created ${path.relative( root, zipPath )} (${sizeKb} KB)` );
-console.log( 'Install by uploading this ZIP in WordPress → Plugins → Add New → Upload Plugin.' );
+console.log( `Created ${zipPath} (${sizeKb} KB)` );
+console.log( 'Upload this ZIP to WordPress.org SVN tags/ or via Plugins → Upload Plugin.' );

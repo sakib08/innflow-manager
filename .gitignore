@@ -1,5 +1,6 @@
 node_modules/
 dist/
+../innflow-manager-builds/
 *.zip
 .DS_Store
 npm-debug.log*

@@ -31,17 +31,15 @@ Legacy shortcode `[hotel_booking_search]` still works.
 | `npm run build` | Production JS + CSS into `assets/dist/` |
 | `npm run watch:js` | Rebuild JS on change |
 | `npm run watch:css` | Rebuild CSS on change |
-| `npm run plugin-zip` | Build assets and create `dist/innflow-manager-VERSION.zip` |
+| `npm run plugin-zip` | Build assets and create a WordPress.org–ready ZIP |
 | `npm run dist` | Alias for `plugin-zip` |
-
-Release ZIP includes PHP, `includes/`, built `assets/dist/`, and readme files. It excludes `node_modules`, `src`, and tooling configs.
 
 ```bash
 npm run plugin-zip
-# → dist/innflow-manager-1.0.0.zip
+# → ../innflow-manager-builds/innflow-manager-1.0.0.zip
 ```
 
-Upload that ZIP via **Plugins → Add New → Upload Plugin**, or unzip into `wp-content/plugins/`.
+The ZIP contains PHP, `includes/`, built `assets/dist/`, and `readme.txt` (no `node_modules`, no `.git`). Source for minified assets: https://github.com/sakib08/innflow-manager
 
 ## Admin pages
 

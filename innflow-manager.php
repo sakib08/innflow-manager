@@ -6,7 +6,7 @@
  * Version:           1.0.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
- * Tested up to:      7.2
+ * Tested up to:      7.0
  * Author:            sakibbd08
  * Author URI:        https://profiles.wordpress.org/sakibbd08/
  * License:           GPL-2.0-or-later
