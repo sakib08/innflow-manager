@@ -1,13 +1,13 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted InnflowManagerDatabase::table() keys.
+// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
 /**
- * Soft-delete / trash helpers for all primary innflow-manager entities.
+ * Soft-delete / trash helpers for all primary StayNexus Hotel Manager entities.
  */
-class InnflowManagerTrash {
+class ShmppTrash {
 
 	/**
 	 * Map of trash type => meta.
@@ -140,7 +140,7 @@ class InnflowManagerTrash {
 
 	public static function table_for( $type ) {
 		$meta = self::resolve( $type );
-		return $meta ? InnflowManagerDatabase::table( $meta['table'] ) : null;
+		return $meta ? ShmppDatabase::table( $meta['table'] ) : null;
 	}
 
 	/**
@@ -155,7 +155,7 @@ class InnflowManagerTrash {
 			return new WP_Error( 'invalid_type', 'Unknown trash type', array( 'status' => 400 ) );
 		}
 
-		$table = InnflowManagerDatabase::table( $meta['table'] );
+		$table = ShmppDatabase::table( $meta['table'] );
 		$id    = (int) $id;
 		$row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A );
 		if ( ! $row ) {
@@ -181,7 +181,7 @@ class InnflowManagerTrash {
 
 		// Cascade soft-delete for tightly coupled children.
 		if ( 'bookings' === $type ) {
-			$check = InnflowManagerDatabase::table( 'guest_checkin_checkout' );
+			$check = ShmppDatabase::table( 'guest_checkin_checkout' );
 			$wpdb->query(
 				$wpdb->prepare(
 					"UPDATE {$check} SET deleted_at = %s WHERE booking_id = %d AND deleted_at IS NULL",
@@ -192,7 +192,7 @@ class InnflowManagerTrash {
 		}
 
 		if ( 'employees' === $type ) {
-			$sal = InnflowManagerDatabase::table( 'employee_salaries' );
+			$sal = ShmppDatabase::table( 'employee_salaries' );
 			$wpdb->query(
 				$wpdb->prepare(
 					"UPDATE {$sal} SET deleted_at = %s WHERE employee_id = %d AND deleted_at IS NULL",
@@ -203,7 +203,7 @@ class InnflowManagerTrash {
 		}
 
 		if ( 'rooms' === $type ) {
-			$slots = InnflowManagerDatabase::table( 'booking_date_slots' );
+			$slots = ShmppDatabase::table( 'booking_date_slots' );
 			$wpdb->query(
 				$wpdb->prepare(
 					"UPDATE {$slots} SET deleted_at = %s WHERE room_type_id = %d AND deleted_at IS NULL",
@@ -232,7 +232,7 @@ class InnflowManagerTrash {
 			return new WP_Error( 'invalid_type', 'Unknown trash type', array( 'status' => 400 ) );
 		}
 
-		$table = InnflowManagerDatabase::table( $meta['table'] );
+		$table = ShmppDatabase::table( $meta['table'] );
 		$id    = (int) $id;
 		$row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A );
 		if ( ! $row ) {
@@ -280,7 +280,7 @@ class InnflowManagerTrash {
 		$wpdb->query( $wpdb->prepare( $sql, $params ) );
 
 		if ( 'bookings' === $type ) {
-			$check = InnflowManagerDatabase::table( 'guest_checkin_checkout' );
+			$check = ShmppDatabase::table( 'guest_checkin_checkout' );
 			$wpdb->query(
 				$wpdb->prepare(
 					"UPDATE {$check} SET deleted_at = NULL WHERE booking_id = %d AND deleted_at IS NOT NULL",
@@ -290,7 +290,7 @@ class InnflowManagerTrash {
 		}
 
 		if ( 'employees' === $type ) {
-			$sal = InnflowManagerDatabase::table( 'employee_salaries' );
+			$sal = ShmppDatabase::table( 'employee_salaries' );
 			$wpdb->query(
 				$wpdb->prepare(
 					"UPDATE {$sal} SET deleted_at = NULL WHERE employee_id = %d AND deleted_at IS NOT NULL",
@@ -300,7 +300,7 @@ class InnflowManagerTrash {
 		}
 
 		if ( 'rooms' === $type ) {
-			$slots = InnflowManagerDatabase::table( 'booking_date_slots' );
+			$slots = ShmppDatabase::table( 'booking_date_slots' );
 			$wpdb->query(
 				$wpdb->prepare(
 					"UPDATE {$slots} SET deleted_at = NULL WHERE room_type_id = %d AND deleted_at IS NOT NULL",
@@ -324,7 +324,7 @@ class InnflowManagerTrash {
 			return new WP_Error( 'invalid_type', 'Unknown trash type', array( 'status' => 400 ) );
 		}
 
-		$table = InnflowManagerDatabase::table( $meta['table'] );
+		$table = ShmppDatabase::table( $meta['table'] );
 		$id    = (int) $id;
 		$row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A );
 		if ( ! $row ) {
@@ -335,25 +335,25 @@ class InnflowManagerTrash {
 		}
 
 		if ( 'rooms' === $type ) {
-			$wpdb->delete( InnflowManagerDatabase::table( 'room_type_amenities' ), array( 'room_type_id' => $id ) );
-			$wpdb->delete( InnflowManagerDatabase::table( 'room_gallery' ), array( 'room_type_id' => $id ) );
-			$wpdb->delete( InnflowManagerDatabase::table( 'booking_date_slots' ), array( 'room_type_id' => $id ) );
+			$wpdb->delete( ShmppDatabase::table( 'room_type_amenities' ), array( 'room_type_id' => $id ) );
+			$wpdb->delete( ShmppDatabase::table( 'room_gallery' ), array( 'room_type_id' => $id ) );
+			$wpdb->delete( ShmppDatabase::table( 'booking_date_slots' ), array( 'room_type_id' => $id ) );
 		}
 
 		if ( 'amenities' === $type ) {
-			$wpdb->delete( InnflowManagerDatabase::table( 'room_type_amenities' ), array( 'amenity_id' => $id ) );
+			$wpdb->delete( ShmppDatabase::table( 'room_type_amenities' ), array( 'amenity_id' => $id ) );
 		}
 
 		if ( 'employees' === $type ) {
-			$wpdb->delete( InnflowManagerDatabase::table( 'employee_salaries' ), array( 'employee_id' => $id ) );
+			$wpdb->delete( ShmppDatabase::table( 'employee_salaries' ), array( 'employee_id' => $id ) );
 		}
 
 		if ( 'bookings' === $type ) {
-			$wpdb->delete( InnflowManagerDatabase::table( 'guest_checkin_checkout' ), array( 'booking_id' => $id ) );
+			$wpdb->delete( ShmppDatabase::table( 'guest_checkin_checkout' ), array( 'booking_id' => $id ) );
 		}
 
 		if ( 'restaurant_bills' === $type ) {
-			$wpdb->delete( InnflowManagerDatabase::table( 'restaurant_guest_bills' ), array( 'restaurant_bill_id' => $id ) );
+			$wpdb->delete( ShmppDatabase::table( 'restaurant_guest_bills' ), array( 'restaurant_bill_id' => $id ) );
 		}
 
 		$wpdb->delete( $table, array( 'id' => $id ) );
@@ -376,7 +376,7 @@ class InnflowManagerTrash {
 				continue;
 			}
 			global $wpdb;
-			$table = InnflowManagerDatabase::table( $meta['table'] );
+			$table = ShmppDatabase::table( $meta['table'] );
 			$ids   = $wpdb->get_col( "SELECT id FROM {$table} WHERE deleted_at IS NOT NULL" );
 			foreach ( $ids as $id ) {
 				$result = self::force_delete( $t, (int) $id );
@@ -405,7 +405,7 @@ class InnflowManagerTrash {
 			if ( ! $meta ) {
 				continue;
 			}
-			$table = InnflowManagerDatabase::table( $meta['table'] );
+			$table = ShmppDatabase::table( $meta['table'] );
 			$rows  = $wpdb->get_results(
 				"SELECT * FROM {$table} WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT 200",
 				ARRAY_A
@@ -438,7 +438,7 @@ class InnflowManagerTrash {
 		$counts = array();
 		$total  = 0;
 		foreach ( self::entities() as $type => $meta ) {
-			$table = InnflowManagerDatabase::table( $meta['table'] );
+			$table = ShmppDatabase::table( $meta['table'] );
 			$n     = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE deleted_at IS NOT NULL" );
 			$counts[ $type ] = array(
 				'label' => $meta['label'],

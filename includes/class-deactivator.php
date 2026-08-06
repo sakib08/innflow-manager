@@ -1,7 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-class InnflowManagerDeactivator {
+class ShmppDeactivator {
 
 	public static function deactivate() {
 		flush_rewrite_rules();

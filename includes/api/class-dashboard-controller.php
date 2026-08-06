@@ -1,12 +1,12 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted InnflowManagerDatabase::table() keys.
+// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
-class InnflowManagerDashboard_Controller {
+class ShmppDashboardController {
 
-	const NS = 'innflow-manager/v1';
+	const NS = 'staynexushm/v1';
 
 	public function register_routes() {
 		register_rest_route(
@@ -15,7 +15,7 @@ class InnflowManagerDashboard_Controller {
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'get_dashboard' ),
-				'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+				'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 			)
 		);
 	}
@@ -40,8 +40,8 @@ class InnflowManagerDashboard_Controller {
 
 	private function guest_overview( $range ) {
 		global $wpdb;
-		$bookings = InnflowManagerDatabase::table( 'bookings' );
-		$check    = InnflowManagerDatabase::table( 'guest_checkin_checkout' );
+		$bookings = ShmppDatabase::table( 'bookings' );
+		$check    = ShmppDatabase::table( 'guest_checkin_checkout' );
 
 		$arrivals = (int) $wpdb->get_var(
 			$wpdb->prepare(
@@ -113,7 +113,7 @@ class InnflowManagerDashboard_Controller {
 
 	private function sum_bills( $table_key, $date_col, $range ) {
 		global $wpdb;
-		$table = InnflowManagerDatabase::table( $table_key );
+		$table = ShmppDatabase::table( $table_key );
 		$sum   = (float) $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT COALESCE(SUM(total_amount),0) FROM {$table} WHERE deleted_at IS NULL AND DATE({$date_col}) BETWEEN %s AND %s",
@@ -126,9 +126,9 @@ class InnflowManagerDashboard_Controller {
 
 	private function recent_bookings() {
 		global $wpdb;
-		$bookings = InnflowManagerDatabase::table( 'bookings' );
-		$guests   = InnflowManagerDatabase::table( 'guests' );
-		$rooms    = InnflowManagerDatabase::table( 'room_types' );
+		$bookings = ShmppDatabase::table( 'bookings' );
+		$guests   = ShmppDatabase::table( 'guests' );
+		$rooms    = ShmppDatabase::table( 'room_types' );
 		return $wpdb->get_results(
 			"SELECT b.id, b.booking_code, b.check_in, b.check_out, b.total_amount, b.booking_status, b.payment_status,
 				g.first_name, g.last_name, r.name AS room_name
@@ -143,8 +143,8 @@ class InnflowManagerDashboard_Controller {
 
 	private function occupancy( $range ) {
 		global $wpdb;
-		$rooms_table = InnflowManagerDatabase::table( 'room_types' );
-		$slots       = InnflowManagerDatabase::table( 'booking_date_slots' );
+		$rooms_table = ShmppDatabase::table( 'room_types' );
+		$slots       = ShmppDatabase::table( 'booking_date_slots' );
 		$total_rooms = (int) $wpdb->get_var( "SELECT COALESCE(SUM(total_rooms),0) FROM {$rooms_table} WHERE status = 'active' AND deleted_at IS NULL" );
 
 		$days = max( 1, (int) ( ( strtotime( $range['to'] ) - strtotime( $range['from'] ) ) / DAY_IN_SECONDS ) + 1 );
@@ -170,9 +170,9 @@ class InnflowManagerDashboard_Controller {
 
 	private function daily_series( $range ) {
 		global $wpdb;
-		$bookings = InnflowManagerDatabase::table( 'bookings' );
-		$room_bills = InnflowManagerDatabase::table( 'room_bills' );
-		$rest_bills = InnflowManagerDatabase::table( 'restaurant_bills' );
+		$bookings = ShmppDatabase::table( 'bookings' );
+		$room_bills = ShmppDatabase::table( 'room_bills' );
+		$rest_bills = ShmppDatabase::table( 'restaurant_bills' );
 
 		$series = array();
 		$date   = $range['from'];

@@ -305,7 +305,7 @@ function SearchApp() {
     : null;
 
   return (
-    <div className="ifmpp-root ifmpp-frontend-app mx-auto max-w-5xl">
+    <div className="shmpp-root shmpp-frontend-app mx-auto max-w-5xl">
       <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-brand-900 via-brand-800 to-brand-700 text-white shadow-xl">
         <div className="relative px-6 py-10 sm:px-10">
           <div
@@ -600,7 +600,7 @@ function SearchApp() {
   );
 }
 
-const rootEl = document.getElementById('ifmpp-frontend-root');
+const rootEl = document.getElementById('shmpp-frontend-root');
 if (rootEl) {
   createRoot(rootEl).render(<SearchApp />);
 }

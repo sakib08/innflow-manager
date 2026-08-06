@@ -62,7 +62,7 @@ export default function SettingsPage() {
             Save settings
           </Button>
           {saved && <p className="text-sm text-emerald-700">Settings saved.</p>}
-          <p className="text-xs text-brand-500">Frontend shortcode: <code>[innflow_manager_search]</code></p>
+          <p className="text-xs text-brand-500">Frontend shortcode: <code>[staynexus_hotel_manager_search]</code></p>
         </Card>
 
         <Card className="space-y-3 p-5">

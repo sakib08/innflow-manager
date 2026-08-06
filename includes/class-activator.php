@@ -1,11 +1,11 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-class InnflowManagerActivator {
+class ShmppActivator {
 
 	public static function activate() {
-		InnflowManagerDatabase::create_tables();
-		InnflowManagerDatabase::seed_defaults();
+		ShmppDatabase::create_tables();
+		ShmppDatabase::seed_defaults();
 		flush_rewrite_rules();
 	}
 }

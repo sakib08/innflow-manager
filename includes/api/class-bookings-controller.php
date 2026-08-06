@@ -1,12 +1,12 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted InnflowManagerDatabase::table() keys.
+// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
-class InnflowManagerBookings_Controller {
+class ShmppBookingsController {
 
-	const NS = 'innflow-manager/v1';
+	const NS = 'staynexushm/v1';
 
 	public function register_routes() {
 		register_rest_route(
@@ -16,12 +16,12 @@ class InnflowManagerBookings_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_bookings' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_booking' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_public' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_public' ),
 				),
 			)
 		);
@@ -33,17 +33,17 @@ class InnflowManagerBookings_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'get_booking' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::EDITABLE,
 					'callback'            => array( $this, 'update_booking' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::DELETABLE,
 					'callback'            => array( $this, 'delete_booking' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -54,7 +54,7 @@ class InnflowManagerBookings_Controller {
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'checkin' ),
-				'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+				'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 			)
 		);
 
@@ -64,7 +64,7 @@ class InnflowManagerBookings_Controller {
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'checkout' ),
-				'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+				'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 			)
 		);
 
@@ -75,12 +75,12 @@ class InnflowManagerBookings_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_discounts' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_discount' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -91,7 +91,7 @@ class InnflowManagerBookings_Controller {
 			array(
 				'methods'             => WP_REST_Server::DELETABLE,
 				'callback'            => array( $this, 'delete_discount' ),
-				'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+				'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 			)
 		);
 
@@ -101,23 +101,23 @@ class InnflowManagerBookings_Controller {
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'validate_discount' ),
-				'permission_callback' => array( 'InnflowManagerRest_API', 'permission_public' ),
+				'permission_callback' => array( 'ShmppRestAPI', 'permission_public' ),
 			)
 		);
 	}
 
 	public function list_bookings( $request ) {
 		global $wpdb;
-		$bookings = InnflowManagerDatabase::table( 'bookings' );
-		$guests   = InnflowManagerDatabase::table( 'guests' );
-		$rooms    = InnflowManagerDatabase::table( 'room_types' );
+		$bookings = ShmppDatabase::table( 'bookings' );
+		$guests   = ShmppDatabase::table( 'guests' );
+		$rooms    = ShmppDatabase::table( 'room_types' );
 
 		$status = sanitize_text_field( $request->get_param( 'status' ) );
 		$sql    = "SELECT b.*, g.first_name, g.last_name, g.email, g.phone, r.name AS room_name
 			FROM {$bookings} b
 			LEFT JOIN {$guests} g ON g.id = b.guest_id
 			LEFT JOIN {$rooms} r ON r.id = b.room_type_id
-			WHERE " . InnflowManagerTrash::alive_sql( 'b' );
+			WHERE " . ShmppTrash::alive_sql( 'b' );
 		$params = array();
 		if ( $status ) {
 			$sql     .= ' AND b.booking_status = %s';
@@ -139,10 +139,10 @@ class InnflowManagerBookings_Controller {
 			$attrs = $request->get_attributes();
 			$id    = isset( $attrs['id'] ) ? (int) $attrs['id'] : 0;
 		}
-		$bookings = InnflowManagerDatabase::table( 'bookings' );
-		$guests   = InnflowManagerDatabase::table( 'guests' );
-		$rooms    = InnflowManagerDatabase::table( 'room_types' );
-		$check    = InnflowManagerDatabase::table( 'guest_checkin_checkout' );
+		$bookings = ShmppDatabase::table( 'bookings' );
+		$guests   = ShmppDatabase::table( 'guests' );
+		$rooms    = ShmppDatabase::table( 'room_types' );
+		$check    = ShmppDatabase::table( 'guest_checkin_checkout' );
 
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
@@ -150,7 +150,7 @@ class InnflowManagerBookings_Controller {
 				FROM {$bookings} b
 				LEFT JOIN {$guests} g ON g.id = b.guest_id
 				LEFT JOIN {$rooms} r ON r.id = b.room_type_id
-				WHERE b.id = %d AND " . InnflowManagerTrash::alive_sql( 'b' ),
+				WHERE b.id = %d AND " . ShmppTrash::alive_sql( 'b' ),
 				$id
 			),
 			ARRAY_A
@@ -161,7 +161,7 @@ class InnflowManagerBookings_Controller {
 		}
 
 		$row['checkin_checkout'] = $wpdb->get_results(
-			$wpdb->prepare( "SELECT * FROM {$check} WHERE booking_id = %d AND " . InnflowManagerTrash::alive_sql(), $id ),
+			$wpdb->prepare( "SELECT * FROM {$check} WHERE booking_id = %d AND " . ShmppTrash::alive_sql(), $id ),
 			ARRAY_A
 		);
 
@@ -194,7 +194,7 @@ class InnflowManagerBookings_Controller {
 			return new WP_Error( 'invalid', 'Guest name and room type are required', array( 'status' => 400 ) );
 		}
 
-		$rooms_table = InnflowManagerDatabase::table( 'room_types' );
+		$rooms_table = ShmppDatabase::table( 'room_types' );
 		$room        = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$rooms_table} WHERE id = %d", $room_type_id ), ARRAY_A );
 		if ( ! $room ) {
 			return new WP_Error( 'not_found', 'Room type not found', array( 'status' => 404 ) );
@@ -203,7 +203,7 @@ class InnflowManagerBookings_Controller {
 		$nights   = (int) ( ( strtotime( $check_out ) - strtotime( $check_in ) ) / DAY_IN_SECONDS );
 		$subtotal = (float) $room['base_price'] * $nights * $rooms_count;
 
-		$settings   = get_option( 'ifmpp_settings', array() );
+		$settings   = get_option( 'shmpp_settings', array() );
 		$tax_rate   = isset( $settings['tax_rate'] ) ? (float) $settings['tax_rate'] : 0;
 		$discount_amount = 0;
 		$discount_id     = null;
@@ -225,10 +225,10 @@ class InnflowManagerBookings_Controller {
 		$tax     = round( $taxable * ( $tax_rate / 100 ), 2 );
 		$total   = round( $taxable + $tax, 2 );
 
-		$wpdb->insert( InnflowManagerDatabase::table( 'guests' ), $guest_data );
+		$wpdb->insert( ShmppDatabase::table( 'guests' ), $guest_data );
 		$guest_id = (int) $wpdb->insert_id;
 
-		$booking_code = 'IFM-' . strtoupper( wp_generate_password( 8, false, false ) );
+		$booking_code = 'SHM-' . strtoupper( wp_generate_password( 8, false, false ) );
 		$booking_data = array(
 			'booking_code'            => $booking_code,
 			'guest_id'                => $guest_id,
@@ -251,11 +251,11 @@ class InnflowManagerBookings_Controller {
 			'notes'                   => sanitize_textarea_field( $request->get_param( 'notes' ) ),
 		);
 
-		$wpdb->insert( InnflowManagerDatabase::table( 'bookings' ), $booking_data );
+		$wpdb->insert( ShmppDatabase::table( 'bookings' ), $booking_data );
 		$booking_id = (int) $wpdb->insert_id;
 
 		$wpdb->insert(
-			InnflowManagerDatabase::table( 'guest_checkin_checkout' ),
+			ShmppDatabase::table( 'guest_checkin_checkout' ),
 			array(
 				'booking_id' => $booking_id,
 				'guest_id'   => $guest_id,
@@ -264,7 +264,7 @@ class InnflowManagerBookings_Controller {
 		);
 
 		$wpdb->insert(
-			InnflowManagerDatabase::table( 'room_bills' ),
+			ShmppDatabase::table( 'room_bills' ),
 			array(
 				'booking_id'   => $booking_id,
 				'guest_id'     => $guest_id,
@@ -282,7 +282,7 @@ class InnflowManagerBookings_Controller {
 		if ( $discount_id ) {
 			$wpdb->query(
 				$wpdb->prepare(
-					'UPDATE ' . InnflowManagerDatabase::table( 'discounts' ) . ' SET used_count = used_count + 1 WHERE id = %d',
+					'UPDATE ' . ShmppDatabase::table( 'discounts' ) . ' SET used_count = used_count + 1 WHERE id = %d',
 					$discount_id
 				)
 			);
@@ -303,7 +303,7 @@ class InnflowManagerBookings_Controller {
 			}
 		}
 		if ( $data ) {
-			$wpdb->update( InnflowManagerDatabase::table( 'bookings' ), $data, array( 'id' => $id ) );
+			$wpdb->update( ShmppDatabase::table( 'bookings' ), $data, array( 'id' => $id ) );
 		}
 		return $this->get_booking( $request );
 	}
@@ -311,7 +311,7 @@ class InnflowManagerBookings_Controller {
 	public function checkin( $request ) {
 		global $wpdb;
 		$id    = (int) $request['id'];
-		$table = InnflowManagerDatabase::table( 'guest_checkin_checkout' );
+		$table = ShmppDatabase::table( 'guest_checkin_checkout' );
 		$wpdb->update(
 			$table,
 			array(
@@ -323,7 +323,7 @@ class InnflowManagerBookings_Controller {
 			array( 'booking_id' => $id )
 		);
 		$wpdb->update(
-			InnflowManagerDatabase::table( 'bookings' ),
+			ShmppDatabase::table( 'bookings' ),
 			array( 'booking_status' => 'checked_in' ),
 			array( 'id' => $id )
 		);
@@ -334,7 +334,7 @@ class InnflowManagerBookings_Controller {
 		global $wpdb;
 		$id = (int) $request['id'];
 		$wpdb->update(
-			InnflowManagerDatabase::table( 'guest_checkin_checkout' ),
+			ShmppDatabase::table( 'guest_checkin_checkout' ),
 			array(
 				'checkout_at'    => current_time( 'mysql' ),
 				'status'         => 'checked_out',
@@ -343,7 +343,7 @@ class InnflowManagerBookings_Controller {
 			array( 'booking_id' => $id )
 		);
 		$wpdb->update(
-			InnflowManagerDatabase::table( 'bookings' ),
+			ShmppDatabase::table( 'bookings' ),
 			array( 'booking_status' => 'checked_out' ),
 			array( 'id' => $id )
 		);
@@ -353,7 +353,7 @@ class InnflowManagerBookings_Controller {
 	public function list_discounts() {
 		global $wpdb;
 		$rows = $wpdb->get_results(
-			'SELECT * FROM ' . InnflowManagerDatabase::table( 'discounts' ) . ' WHERE ' . InnflowManagerTrash::alive_sql() . ' ORDER BY id DESC',
+			'SELECT * FROM ' . ShmppDatabase::table( 'discounts' ) . ' WHERE ' . ShmppTrash::alive_sql() . ' ORDER BY id DESC',
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -372,14 +372,14 @@ class InnflowManagerBookings_Controller {
 			'ends_at'        => sanitize_text_field( $request->get_param( 'ends_at' ) ),
 			'status'         => 'active',
 		);
-		$wpdb->insert( InnflowManagerDatabase::table( 'discounts' ), $data );
+		$wpdb->insert( ShmppDatabase::table( 'discounts' ), $data );
 		$id  = (int) $wpdb->insert_id;
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . InnflowManagerDatabase::table( 'discounts' ) . ' WHERE id = %d', $id ), ARRAY_A );
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . ShmppDatabase::table( 'discounts' ) . ' WHERE id = %d', $id ), ARRAY_A );
 		return rest_ensure_response( $row );
 	}
 
 	public function delete_discount( $request ) {
-		$result = InnflowManagerTrash::trash( 'discounts', (int) $request['id'] );
+		$result = ShmppTrash::trash( 'discounts', (int) $request['id'] );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
@@ -387,7 +387,7 @@ class InnflowManagerBookings_Controller {
 	}
 
 	public function delete_booking( $request ) {
-		$result = InnflowManagerTrash::trash( 'bookings', (int) $request['id'] );
+		$result = ShmppTrash::trash( 'bookings', (int) $request['id'] );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
@@ -406,9 +406,9 @@ class InnflowManagerBookings_Controller {
 
 	private function find_valid_discount( $code, $nights ) {
 		global $wpdb;
-		$table = InnflowManagerDatabase::table( 'discounts' );
+		$table = ShmppDatabase::table( 'discounts' );
 		$row   = $wpdb->get_row(
-			$wpdb->prepare( "SELECT * FROM {$table} WHERE code = %s AND status = 'active' AND " . InnflowManagerTrash::alive_sql(), strtoupper( $code ) ),
+			$wpdb->prepare( "SELECT * FROM {$table} WHERE code = %s AND status = 'active' AND " . ShmppTrash::alive_sql(), strtoupper( $code ) ),
 			ARRAY_A
 		);
 		if ( ! $row ) {
@@ -432,8 +432,8 @@ class InnflowManagerBookings_Controller {
 
 	private function reserve_slots( $room_type_id, $check_in, $check_out, $rooms_count ) {
 		global $wpdb;
-		$table  = InnflowManagerDatabase::table( 'booking_date_slots' );
-		$rooms  = InnflowManagerDatabase::table( 'room_types' );
+		$table  = ShmppDatabase::table( 'booking_date_slots' );
+		$rooms  = ShmppDatabase::table( 'room_types' );
 		$total  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT total_rooms FROM {$rooms} WHERE id = %d", $room_type_id ) );
 		$date   = $check_in;
 		$nights = (int) ( ( strtotime( $check_out ) - strtotime( $check_in ) ) / DAY_IN_SECONDS );
@@ -441,7 +441,7 @@ class InnflowManagerBookings_Controller {
 		for ( $i = 0; $i < $nights; $i++ ) {
 			$existing = $wpdb->get_row(
 				$wpdb->prepare(
-					"SELECT * FROM {$table} WHERE room_type_id = %d AND slot_date = %s AND " . InnflowManagerTrash::alive_sql(),
+					"SELECT * FROM {$table} WHERE room_type_id = %d AND slot_date = %s AND " . ShmppTrash::alive_sql(),
 					$room_type_id,
 					$date
 				),

@@ -1,7 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-class InnflowManagerPlugin {
+class ShmppPlugin {
 
 	private static $instance = null;
 
@@ -17,18 +17,18 @@ class InnflowManagerPlugin {
 	}
 
 	private function init_hooks() {
-		add_action( 'rest_api_init', array( 'InnflowManagerRest_API', 'register_routes' ) );
+		add_action( 'rest_api_init', array( 'ShmppRestAPI', 'register_routes' ) );
 
 		if ( is_admin() ) {
-			InnflowManagerAdmin::instance();
+			ShmppAdmin::instance();
 		}
 
-		InnflowManagerFrontend::instance();
+		ShmppFrontend::instance();
 
-		$db_version = get_option( 'ifmpp_db_version' );
-		if ( ! $db_version || InnflowManagerDatabase::DB_VERSION !== $db_version ) {
-			InnflowManagerDatabase::create_tables();
-			InnflowManagerDatabase::seed_defaults();
+		$db_version = get_option( 'shmpp_db_version' );
+		if ( ! $db_version || ShmppDatabase::DB_VERSION !== $db_version ) {
+			ShmppDatabase::create_tables();
+			ShmppDatabase::seed_defaults();
 		}
 	}
 

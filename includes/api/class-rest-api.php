@@ -1,20 +1,20 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-class InnflowManagerRest_API {
+class ShmppRestAPI {
 
 	public static function register_routes() {
 		$controllers = array(
-			new InnflowManagerRooms_Controller(),
-			new InnflowManagerBookings_Controller(),
-			new InnflowManagerGuests_Controller(),
-			new InnflowManagerBilling_Controller(),
-			new InnflowManagerDashboard_Controller(),
-			new InnflowManagerEmployees_Controller(),
-			new InnflowManagerSettings_Controller(),
-			new InnflowManagerRestaurants_Controller(),
-			new InnflowManagerAmenities_Controller(),
-			new InnflowManagerTrash_Controller(),
+			new ShmppRoomsController(),
+			new ShmppBookingsController(),
+			new ShmppGuestsController(),
+			new ShmppBillingController(),
+			new ShmppDashboardController(),
+			new ShmppEmployeesController(),
+			new ShmppSettingsController(),
+			new ShmppRestaurantsController(),
+			new ShmppAmenitiesController(),
+			new ShmppTrashController(),
 		);
 
 		foreach ( $controllers as $controller ) {
@@ -27,6 +27,6 @@ class InnflowManagerRest_API {
 	}
 
 	public static function permission_public() {
-		return true;
+		return __return_true();
 	}
 }

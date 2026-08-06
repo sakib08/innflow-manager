@@ -34,5 +34,5 @@ module.exports = {
   corePlugins: {
     preflight: true,
   },
-  important: '.ifmpp-root',
+  important: '.shmpp-root',
 };

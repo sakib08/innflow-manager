@@ -3,12 +3,12 @@ defined( 'ABSPATH' ) || exit;
 
 // phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_fopen,WordPress.WP.AlternativeFunctions.file_system_operations_fwrite,WordPress.WP.AlternativeFunctions.file_system_operations_fread,WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- CSV stream to php://output and reading uploaded tmp files.
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted InnflowManagerDatabase::table() keys.
+// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
-class InnflowManagerEmployees_Controller {
+class ShmppEmployeesController {
 
-	const NS = 'innflow-manager/v1';
+	const NS = 'staynexushm/v1';
 
 	public function register_routes() {
 		register_rest_route(
@@ -18,12 +18,12 @@ class InnflowManagerEmployees_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_employees' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_employee' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -34,7 +34,7 @@ class InnflowManagerEmployees_Controller {
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'export_employees' ),
-				'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+				'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 			)
 		);
 
@@ -45,12 +45,12 @@ class InnflowManagerEmployees_Controller {
 				array(
 					'methods'             => WP_REST_Server::EDITABLE,
 					'callback'            => array( $this, 'update_employee' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::DELETABLE,
 					'callback'            => array( $this, 'delete_employee' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -62,12 +62,12 @@ class InnflowManagerEmployees_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_roles' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_role' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -79,12 +79,12 @@ class InnflowManagerEmployees_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_salaries' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_salary' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -92,10 +92,10 @@ class InnflowManagerEmployees_Controller {
 
 	public function list_employees() {
 		global $wpdb;
-		$emp  = InnflowManagerDatabase::table( 'employees' );
-		$role = InnflowManagerDatabase::table( 'employee_roles' );
+		$emp  = ShmppDatabase::table( 'employees' );
+		$role = ShmppDatabase::table( 'employee_roles' );
 		$rows = $wpdb->get_results(
-			"SELECT e.*, r.name AS role_name FROM {$emp} e LEFT JOIN {$role} r ON r.id = e.role_id WHERE " . InnflowManagerTrash::alive_sql( 'e' ) . ' ORDER BY e.id DESC',
+			"SELECT e.*, r.name AS role_name FROM {$emp} e LEFT JOIN {$role} r ON r.id = e.role_id WHERE " . ShmppTrash::alive_sql( 'e' ) . ' ORDER BY e.id DESC',
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -104,10 +104,10 @@ class InnflowManagerEmployees_Controller {
 	public function export_employees( $request ) {
 		global $wpdb;
 		$format = sanitize_text_field( $request->get_param( 'format' ) ?: 'csv' );
-		$emp    = InnflowManagerDatabase::table( 'employees' );
-		$role   = InnflowManagerDatabase::table( 'employee_roles' );
+		$emp    = ShmppDatabase::table( 'employees' );
+		$role   = ShmppDatabase::table( 'employee_roles' );
 		$employees = $wpdb->get_results(
-			"SELECT e.*, r.name AS role_name FROM {$emp} e LEFT JOIN {$role} r ON r.id = e.role_id WHERE " . InnflowManagerTrash::alive_sql( 'e' ) . ' ORDER BY e.id ASC',
+			"SELECT e.*, r.name AS role_name FROM {$emp} e LEFT JOIN {$role} r ON r.id = e.role_id WHERE " . ShmppTrash::alive_sql( 'e' ) . ' ORDER BY e.id ASC',
 			ARRAY_A
 		);
 
@@ -140,8 +140,8 @@ class InnflowManagerEmployees_Controller {
 			);
 		}
 
-		if ( 'xlsx' === $format && InnflowManagerXlsx_Writer::is_available() ) {
-			$writer = new InnflowManagerXlsx_Writer();
+		if ( 'xlsx' === $format && ShmppXlsxWriter::is_available() ) {
+			$writer = new ShmppXlsxWriter();
 			$writer->add_row( $columns );
 			foreach ( $data_rows as $row ) {
 				$writer->add_row( $row );
@@ -180,7 +180,7 @@ class InnflowManagerEmployees_Controller {
 			'status'        => sanitize_text_field( $request->get_param( 'status' ) ?: 'active' ),
 			'address'       => sanitize_textarea_field( $request->get_param( 'address' ) ),
 		);
-		$wpdb->insert( InnflowManagerDatabase::table( 'employees' ), $data );
+		$wpdb->insert( ShmppDatabase::table( 'employees' ), $data );
 		return $this->list_employees();
 	}
 
@@ -197,12 +197,12 @@ class InnflowManagerEmployees_Controller {
 			'status'     => sanitize_text_field( $request->get_param( 'status' ) ?: 'active' ),
 			'address'    => sanitize_textarea_field( $request->get_param( 'address' ) ),
 		);
-		$wpdb->update( InnflowManagerDatabase::table( 'employees' ), $data, array( 'id' => $id ) );
+		$wpdb->update( ShmppDatabase::table( 'employees' ), $data, array( 'id' => $id ) );
 		return $this->list_employees();
 	}
 
 	public function delete_employee( $request ) {
-		$result = InnflowManagerTrash::trash( 'employees', (int) $request['id'] );
+		$result = ShmppTrash::trash( 'employees', (int) $request['id'] );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
@@ -212,7 +212,7 @@ class InnflowManagerEmployees_Controller {
 	public function list_roles() {
 		global $wpdb;
 		$rows = $wpdb->get_results(
-			'SELECT * FROM ' . InnflowManagerDatabase::table( 'employee_roles' ) . ' WHERE ' . InnflowManagerTrash::alive_sql() . ' ORDER BY name ASC',
+			'SELECT * FROM ' . ShmppDatabase::table( 'employee_roles' ) . ' WHERE ' . ShmppTrash::alive_sql() . ' ORDER BY name ASC',
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -222,7 +222,7 @@ class InnflowManagerEmployees_Controller {
 		global $wpdb;
 		$name = sanitize_text_field( $request->get_param( 'name' ) );
 		$wpdb->insert(
-			InnflowManagerDatabase::table( 'employee_roles' ),
+			ShmppDatabase::table( 'employee_roles' ),
 			array(
 				'name'        => $name,
 				'slug'        => sanitize_title( $name ),
@@ -234,12 +234,12 @@ class InnflowManagerEmployees_Controller {
 
 	public function list_salaries() {
 		global $wpdb;
-		$sal = InnflowManagerDatabase::table( 'employee_salaries' );
-		$emp = InnflowManagerDatabase::table( 'employees' );
+		$sal = ShmppDatabase::table( 'employee_salaries' );
+		$emp = ShmppDatabase::table( 'employees' );
 		$rows = $wpdb->get_results(
 			"SELECT s.*, e.first_name, e.last_name, e.employee_code
 			FROM {$sal} s LEFT JOIN {$emp} e ON e.id = s.employee_id
-			WHERE " . InnflowManagerTrash::alive_sql( 's' ) . '
+			WHERE " . ShmppTrash::alive_sql( 's' ) . '
 			ORDER BY s.employee_id ASC, s.salary_month DESC',
 			ARRAY_A
 		);
@@ -284,7 +284,7 @@ class InnflowManagerEmployees_Controller {
 			'notes'                   => sanitize_textarea_field( $request->get_param( 'notes' ) ),
 		);
 
-		$table    = InnflowManagerDatabase::table( 'employee_salaries' );
+		$table    = ShmppDatabase::table( 'employee_salaries' );
 		$existing = $employee_id && $salary_month
 			? $wpdb->get_var(
 				$wpdb->prepare(

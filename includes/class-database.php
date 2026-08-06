@@ -1,16 +1,16 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted InnflowManagerDatabase::table() keys.
+// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
-class InnflowManagerDatabase {
+class ShmppDatabase {
 
-	const DB_VERSION = '1.5.0';
+	const DB_VERSION = '1.6.0';
 
 	public static function table( $name ) {
 		global $wpdb;
-		return $wpdb->prefix . 'ifmpp_' . $name;
+		return $wpdb->prefix . 'shmpp_' . $name;
 	}
 
 	public static function create_tables() {
@@ -390,24 +390,28 @@ class InnflowManagerDatabase {
 
 		self::ensure_trash_columns();
 
-		update_option( 'ifmpp_db_version', self::DB_VERSION );
+		update_option( 'shmpp_db_version', self::DB_VERSION );
 	}
 
 	/**
-	 * Migrate legacy hb_/ifm_ tables and options to ifmpp_.
+	 * Migrate legacy hb_/ifm_/ifmpp_ tables and options to shmpp_.
 	 */
 	public static function migrate_legacy() {
 		global $wpdb;
 
 		$option_map = array(
-			'hb_settings'      => 'ifmpp_settings',
-			'ifm_settings'     => 'ifmpp_settings',
-			'hb_db_version'    => 'ifmpp_db_version',
-			'ifm_db_version'   => 'ifmpp_db_version',
-			'hb_export_token'  => 'ifmpp_export_token',
-			'ifm_export_token' => 'ifmpp_export_token',
-			'hb_demo_seeded'   => 'ifmpp_demo_seeded',
-			'ifm_demo_seeded'  => 'ifmpp_demo_seeded',
+			'hb_settings'       => 'shmpp_settings',
+			'ifm_settings'      => 'shmpp_settings',
+			'ifmpp_settings'    => 'shmpp_settings',
+			'hb_db_version'     => 'shmpp_db_version',
+			'ifm_db_version'    => 'shmpp_db_version',
+			'ifmpp_db_version'  => 'shmpp_db_version',
+			'hb_export_token'   => 'shmpp_export_token',
+			'ifm_export_token'  => 'shmpp_export_token',
+			'ifmpp_export_token'=> 'shmpp_export_token',
+			'hb_demo_seeded'    => 'shmpp_demo_seeded',
+			'ifm_demo_seeded'   => 'shmpp_demo_seeded',
+			'ifmpp_demo_seeded' => 'shmpp_demo_seeded',
 		);
 
 		foreach ( $option_map as $old => $new ) {
@@ -443,10 +447,10 @@ class InnflowManagerDatabase {
 			'employee_salaries',
 		);
 
-		$legacy_prefixes = array( 'ifm_', 'hb_' );
+		$legacy_prefixes = array( 'ifmpp_', 'ifm_', 'hb_' );
 
 		foreach ( $suffixes as $suffix ) {
-			$new = $wpdb->prefix . 'ifmpp_' . $suffix;
+			$new = $wpdb->prefix . 'shmpp_' . $suffix;
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$new_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $new ) );
 
@@ -481,7 +485,7 @@ class InnflowManagerDatabase {
 		// Update shortcodes in content.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->query(
-			"UPDATE {$wpdb->posts} SET post_content = REPLACE(post_content, '[hotel_booking_search', '[innflow_manager_search') WHERE post_content LIKE '%[hotel_booking_search%'"
+			"UPDATE {$wpdb->posts} SET post_content = REPLACE(post_content, '[hotel_booking_search', '[staynexus_hotel_manager_search') WHERE post_content LIKE '%[hotel_booking_search%'"
 		);
 	}
 
@@ -578,10 +582,10 @@ class InnflowManagerDatabase {
 			}
 		}
 
-		$settings = get_option( 'ifmpp_settings' );
+		$settings = get_option( 'shmpp_settings' );
 		if ( ! $settings ) {
 			update_option(
-				'ifmpp_settings',
+				'shmpp_settings',
 				array(
 					'hotel_name'      => 'Aurora Bay Resort & Spa',
 					'currency'        => 'USD',
@@ -616,10 +620,10 @@ class InnflowManagerDatabase {
 		}
 
 		// Align hotel branding with demo content when still on defaults / empty.
-		$settings = get_option( 'ifmpp_settings', array() );
+		$settings = get_option( 'shmpp_settings', array() );
 		if ( empty( $settings['hotel_name'] ) || 'Grand Hotel' === $settings['hotel_name'] ) {
 			update_option(
-				'ifmpp_settings',
+				'shmpp_settings',
 				array_merge(
 					is_array( $settings ) ? $settings : array(),
 					array(
@@ -675,7 +679,7 @@ class InnflowManagerDatabase {
 			$amenity_ids[ $a[1] ] = (int) $wpdb->insert_id;
 		}
 
-		// Room types with list + gallery images (Unsplash).
+		// Room types (images left empty — upload locally via Media Library).
 		$room_defs = array(
 			array(
 				'name'         => 'Harbor Deluxe',
@@ -685,12 +689,8 @@ class InnflowManagerDatabase {
 				'max_adults'   => 2,
 				'max_children' => 1,
 				'total_rooms'  => 18,
-				'image_url'    => 'https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=800&q=80',
-				'gallery'      => array(
-					'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=1200&q=80',
-				),
+				'image_url'    => '',
+				'gallery'      => array(),
 				'amenities'    => array( 'wifi', 'ac', 'bed', 'tv', 'coffee', 'safe' ),
 			),
 			array(
@@ -701,13 +701,8 @@ class InnflowManagerDatabase {
 				'max_adults'   => 3,
 				'max_children' => 2,
 				'total_rooms'  => 8,
-				'image_url'    => 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
-				'gallery'      => array(
-					'https://images.unsplash.com/photo-1578683010236-d716f9a3f461?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=1200&q=80',
-				),
+				'image_url'    => '',
+				'gallery'      => array(),
 				'amenities'    => array( 'wifi', 'ac', 'bed', 'ocean', 'minibar', 'bath', 'balcony', 'tv', 'coffee', 'safe', 'service' ),
 			),
 			array(
@@ -718,12 +713,8 @@ class InnflowManagerDatabase {
 				'max_adults'   => 4,
 				'max_children' => 3,
 				'total_rooms'  => 12,
-				'image_url'    => 'https://images.unsplash.com/photo-1591088398332-8a7791972843?auto=format&fit=crop&w=800&q=80',
-				'gallery'      => array(
-					'https://images.unsplash.com/photo-1560185127-6ed189bf02f4?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1595576508898-0ad5c879a061?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1631049552057-403cdb8f0658?auto=format&fit=crop&w=1200&q=80',
-				),
+				'image_url'    => '',
+				'gallery'      => array(),
 				'amenities'    => array( 'wifi', 'ac', 'tv', 'coffee', 'desk', 'safe' ),
 			),
 			array(
@@ -734,11 +725,8 @@ class InnflowManagerDatabase {
 				'max_adults'   => 2,
 				'max_children' => 0,
 				'total_rooms'  => 10,
-				'image_url'    => 'https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=800&q=80',
-				'gallery'      => array(
-					'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=1200&q=80',
-				),
+				'image_url'    => '',
+				'gallery'      => array(),
 				'amenities'    => array( 'wifi', 'ac', 'desk', 'tv', 'coffee', 'safe' ),
 			),
 			array(
@@ -749,13 +737,8 @@ class InnflowManagerDatabase {
 				'max_adults'   => 4,
 				'max_children' => 2,
 				'total_rooms'  => 2,
-				'image_url'    => 'https://images.unsplash.com/photo-1578683010236-d716f9a3f461?auto=format&fit=crop&w=800&q=80',
-				'gallery'      => array(
-					'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80',
-				),
+				'image_url'    => '',
+				'gallery'      => array(),
 				'amenities'    => array( 'wifi', 'ac', 'bed', 'ocean', 'minibar', 'bath', 'balcony', 'tv', 'coffee', 'safe', 'service', 'desk' ),
 			),
 		);
@@ -1008,7 +991,7 @@ class InnflowManagerDatabase {
 			$taxable   = max( 0, $subtotal - $disc_amt );
 			$tax       = round( $taxable * ( $tax_rate / 100 ), 2 );
 			$total     = $taxable + $tax;
-			$code      = 'IFM-' . strtoupper( substr( md5( $guest_id . $check_in . $room_id ), 0, 8 ) );
+			$code      = 'SHM-' . strtoupper( substr( md5( $guest_id . $check_in . $room_id ), 0, 8 ) );
 
 			$wpdb->insert(
 				self::table( 'bookings' ),
@@ -1184,7 +1167,7 @@ class InnflowManagerDatabase {
 			)
 		);
 
-		update_option( 'ifmpp_demo_seeded', 1 );
+		update_option( 'shmpp_demo_seeded', 1 );
 		return true;
 	}
 }

@@ -1,12 +1,12 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted InnflowManagerDatabase::table() keys.
+// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
-class InnflowManagerRestaurants_Controller {
+class ShmppRestaurantsController {
 
-	const NS = 'innflow-manager/v1';
+	const NS = 'staynexushm/v1';
 
 	public function register_routes() {
 		register_rest_route(
@@ -16,12 +16,12 @@ class InnflowManagerRestaurants_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_restaurants' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_restaurant' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -33,12 +33,12 @@ class InnflowManagerRestaurants_Controller {
 				array(
 					'methods'             => WP_REST_Server::EDITABLE,
 					'callback'            => array( $this, 'update_restaurant' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::DELETABLE,
 					'callback'            => array( $this, 'delete_restaurant' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -47,7 +47,7 @@ class InnflowManagerRestaurants_Controller {
 	public function list_restaurants() {
 		global $wpdb;
 		$rows = $wpdb->get_results(
-			'SELECT * FROM ' . InnflowManagerDatabase::table( 'restaurants' ) . ' WHERE ' . InnflowManagerTrash::alive_sql() . ' ORDER BY name ASC',
+			'SELECT * FROM ' . ShmppDatabase::table( 'restaurants' ) . ' WHERE ' . ShmppTrash::alive_sql() . ' ORDER BY name ASC',
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -62,7 +62,7 @@ class InnflowManagerRestaurants_Controller {
 			'opening_hours' => sanitize_text_field( $request->get_param( 'opening_hours' ) ),
 			'status'        => sanitize_text_field( $request->get_param( 'status' ) ?: 'active' ),
 		);
-		$wpdb->insert( InnflowManagerDatabase::table( 'restaurants' ), $data );
+		$wpdb->insert( ShmppDatabase::table( 'restaurants' ), $data );
 		return $this->list_restaurants();
 	}
 
@@ -76,12 +76,12 @@ class InnflowManagerRestaurants_Controller {
 			'opening_hours' => sanitize_text_field( $request->get_param( 'opening_hours' ) ),
 			'status'        => sanitize_text_field( $request->get_param( 'status' ) ?: 'active' ),
 		);
-		$wpdb->update( InnflowManagerDatabase::table( 'restaurants' ), $data, array( 'id' => $id ) );
+		$wpdb->update( ShmppDatabase::table( 'restaurants' ), $data, array( 'id' => $id ) );
 		return $this->list_restaurants();
 	}
 
 	public function delete_restaurant( $request ) {
-		$result = InnflowManagerTrash::trash( 'restaurants', (int) $request['id'] );
+		$result = ShmppTrash::trash( 'restaurants', (int) $request['id'] );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}

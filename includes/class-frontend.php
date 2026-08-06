@@ -1,7 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-class InnflowManagerFrontend {
+class ShmppFrontend {
 
 	private static $instance = null;
 
@@ -25,9 +25,7 @@ class InnflowManagerFrontend {
 	}
 
 	private function __construct() {
-		add_shortcode( 'innflow_manager_search', array( $this, 'render_search' ) );
-		// Legacy shortcode alias from Hotel Booking.
-		add_shortcode( 'hotel_booking_search', array( $this, 'render_search' ) );
+		add_shortcode( 'staynexus_hotel_manager_search', array( $this, 'render_search' ) );
 		add_filter( 'the_posts', array( $this, 'detect_shortcode' ), 10, 2 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'register_assets' ), 5 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'maybe_enqueue' ), 20 );
@@ -46,10 +44,7 @@ class InnflowManagerFrontend {
 			if ( ! is_object( $post ) || empty( $post->post_content ) ) {
 				continue;
 			}
-			if (
-				has_shortcode( $post->post_content, 'innflow_manager_search' )
-				|| has_shortcode( $post->post_content, 'hotel_booking_search' )
-			) {
+			if ( has_shortcode( $post->post_content, 'staynexus_hotel_manager_search' ) ) {
 				$this->shortcode_present = true;
 				break;
 			}
@@ -63,30 +58,30 @@ class InnflowManagerFrontend {
 			return;
 		}
 
-		$js_path = InnflowManagerPLUGIN_DIR . 'assets/dist/frontend.js';
+		$js_path = SHMPP_PLUGIN_DIR . 'assets/dist/frontend.js';
 		if ( ! file_exists( $js_path ) ) {
 			return;
 		}
 
-		$asset_file = InnflowManagerPLUGIN_DIR . 'assets/dist/frontend.asset.php';
+		$asset_file = SHMPP_PLUGIN_DIR . 'assets/dist/frontend.asset.php';
 		$asset      = file_exists( $asset_file )
 			? include $asset_file
 			: array(
 				'dependencies' => array(),
-				'version'      => InnflowManagerVERSION,
+				'version'      => SHMPP_VERSION,
 			);
 
 		wp_register_script(
-			'ifmpp-frontend',
-			InnflowManagerPLUGIN_URL . 'assets/dist/frontend.js',
+			'shmpp-frontend',
+			SHMPP_PLUGIN_URL . 'assets/dist/frontend.js',
 			$asset['dependencies'],
 			$asset['version'],
 			true
 		);
 
 		wp_register_style(
-			'ifmpp-frontend',
-			InnflowManagerPLUGIN_URL . 'assets/dist/frontend.css',
+			'shmpp-frontend',
+			SHMPP_PLUGIN_URL . 'assets/dist/frontend.css',
 			array(),
 			$asset['version']
 		);
@@ -101,11 +96,11 @@ class InnflowManagerFrontend {
 	}
 
 	private function get_boot_config( $title = '' ) {
-		$settings = get_option( 'ifmpp_settings', array() );
+		$settings = get_option( 'shmpp_settings', array() );
 		return array(
-			'apiUrl'   => esc_url_raw( rest_url( 'innflow-manager/v1' ) ),
+			'apiUrl'   => esc_url_raw( rest_url( 'staynexushm/v1' ) ),
 			'nonce'    => wp_create_nonce( 'wp_rest' ),
-			'title'    => $title ? $title : __( 'Find Your Stay', 'innflow-manager' ),
+			'title'    => $title ? $title : __( 'Find Your Stay', 'staynexus-hotel-manager' ),
 			'settings' => $settings,
 		);
 	}
@@ -117,16 +112,16 @@ class InnflowManagerFrontend {
 			return;
 		}
 
-		wp_enqueue_script( 'ifmpp-frontend' );
-		wp_enqueue_style( 'ifmpp-frontend' );
+		wp_enqueue_script( 'shmpp-frontend' );
+		wp_enqueue_style( 'shmpp-frontend' );
 
 		if ( $this->config_printed ) {
 			return;
 		}
 
 		$config = $this->get_boot_config( $title );
-		$inline = 'window.ifmppFrontend = ' . wp_json_encode( $config ) . ';';
-		$ok     = wp_add_inline_script( 'ifmpp-frontend', $inline, 'before' );
+		$inline = 'window.shmppFrontend = ' . wp_json_encode( $config ) . ';';
+		$ok     = wp_add_inline_script( 'shmpp-frontend', $inline, 'before' );
 
 		if ( $ok ) {
 			$this->config_printed = true;
@@ -147,17 +142,17 @@ class InnflowManagerFrontend {
 		}
 
 		$config = $this->get_boot_config( $this->shortcode_title );
-		echo '<script id="ifmpp-frontend-boot">window.ifmppFrontend = ' . wp_json_encode( $config ) . ';</script>' . "\n";
+		echo '<script id="shmpp-frontend-boot">window.shmppFrontend = ' . wp_json_encode( $config ) . ';</script>' . "\n";
 		$this->config_printed = true;
 	}
 
 	public function render_search( $atts = array() ) {
 		$atts = shortcode_atts(
 			array(
-				'title' => __( 'Find Your Stay', 'innflow-manager' ),
+				'title' => __( 'Find Your Stay', 'staynexus-hotel-manager' ),
 			),
 			$atts,
-			'innflow_manager_search'
+			'staynexus_hotel_manager_search'
 		);
 
 		$this->shortcode_present = true;
@@ -169,7 +164,7 @@ class InnflowManagerFrontend {
 		$config = $this->get_boot_config( $atts['title'] );
 
 		return sprintf(
-			'<div id="ifmpp-frontend-root" class="ifmpp-frontend-app ifmpp-root" data-api-url="%s" data-nonce="%s" data-title="%s" data-settings="%s"></div>',
+			'<div id="shmpp-frontend-root" class="shmpp-frontend-app shmpp-root" data-api-url="%s" data-nonce="%s" data-title="%s" data-settings="%s"></div>',
 			esc_url( $config['apiUrl'] ),
 			esc_attr( $config['nonce'] ),
 			esc_attr( $config['title'] ),

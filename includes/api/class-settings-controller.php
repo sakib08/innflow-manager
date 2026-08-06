@@ -1,12 +1,12 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted InnflowManagerDatabase::table() keys.
+// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
-class InnflowManagerSettings_Controller {
+class ShmppSettingsController {
 
-	const NS = 'innflow-manager/v1';
+	const NS = 'staynexushm/v1';
 
 	public function register_routes() {
 		register_rest_route(
@@ -16,12 +16,12 @@ class InnflowManagerSettings_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'get_settings' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'save_settings' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -32,19 +32,19 @@ class InnflowManagerSettings_Controller {
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'seed_demo' ),
-				'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+				'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 			)
 		);
 	}
 
 	public function get_settings() {
-		$settings = get_option( 'ifmpp_settings', array() );
+		$settings = get_option( 'shmpp_settings', array() );
 		return rest_ensure_response( $settings );
 	}
 
 	public function seed_demo() {
 		global $wpdb;
-		$rooms = InnflowManagerDatabase::table( 'room_types' );
+		$rooms = ShmppDatabase::table( 'room_types' );
 		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rooms}" );
 		if ( $count > 0 ) {
 			return new WP_Error(
@@ -55,7 +55,7 @@ class InnflowManagerSettings_Controller {
 		}
 
 		// seed_defaults() also loads demo content when room types are empty.
-		InnflowManagerDatabase::seed_defaults();
+		ShmppDatabase::seed_defaults();
 		$after = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rooms}" );
 
 		return rest_ensure_response(
@@ -69,7 +69,7 @@ class InnflowManagerSettings_Controller {
 	}
 
 	public function save_settings( $request ) {
-		$current = get_option( 'ifmpp_settings', array() );
+		$current = get_option( 'shmpp_settings', array() );
 		$incoming = $request->get_json_params();
 		if ( ! is_array( $incoming ) ) {
 			$incoming = $request->get_params();
@@ -103,7 +103,7 @@ class InnflowManagerSettings_Controller {
 			}
 		}
 
-		update_option( 'ifmpp_settings', $current );
+		update_option( 'shmpp_settings', $current );
 		return rest_ensure_response( $current );
 	}
 }

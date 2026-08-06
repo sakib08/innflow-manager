@@ -1,7 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-class InnflowManagerAdmin {
+class ShmppAdmin {
 
 	private static $instance = null;
 
@@ -19,30 +19,30 @@ class InnflowManagerAdmin {
 
 	public function register_menu() {
 		add_menu_page(
-			__( 'InnFlow Manager', 'innflow-manager' ),
-			__( 'InnFlow Manager', 'innflow-manager' ),
+			__( 'StayNexus Hotel Manager', 'staynexus-hotel-manager' ),
+			__( 'StayNexus Hotel Manager', 'staynexus-hotel-manager' ),
 			'manage_options',
-			'innflow-manager',
+			'staynexus-hotel-manager',
 			array( $this, 'render_app' ),
 			'dashicons-building',
 			26
 		);
 
 		$subpages = array(
-			'innflow-manager'            => __( 'Dashboard', 'innflow-manager' ),
-			'innflow-manager-rooms'      => __( 'Rooms', 'innflow-manager' ),
-			'innflow-manager-bookings'   => __( 'Bookings', 'innflow-manager' ),
-			'innflow-manager-guests'     => __( 'Guests', 'innflow-manager' ),
-			'innflow-manager-billing'    => __( 'Billing', 'innflow-manager' ),
-			'innflow-manager-staff'      => __( 'Staff', 'innflow-manager' ),
-			'innflow-manager-restaurants' => __( 'Restaurants', 'innflow-manager' ),
-			'innflow-manager-trash'       => __( 'Trash', 'innflow-manager' ),
-			'innflow-manager-settings'   => __( 'Settings', 'innflow-manager' ),
+			'staynexus-hotel-manager'            => __( 'Dashboard', 'staynexus-hotel-manager' ),
+			'staynexus-hotel-manager-rooms'      => __( 'Rooms', 'staynexus-hotel-manager' ),
+			'staynexus-hotel-manager-bookings'   => __( 'Bookings', 'staynexus-hotel-manager' ),
+			'staynexus-hotel-manager-guests'     => __( 'Guests', 'staynexus-hotel-manager' ),
+			'staynexus-hotel-manager-billing'    => __( 'Billing', 'staynexus-hotel-manager' ),
+			'staynexus-hotel-manager-staff'      => __( 'Staff', 'staynexus-hotel-manager' ),
+			'staynexus-hotel-manager-restaurants' => __( 'Restaurants', 'staynexus-hotel-manager' ),
+			'staynexus-hotel-manager-trash'       => __( 'Trash', 'staynexus-hotel-manager' ),
+			'staynexus-hotel-manager-settings'   => __( 'Settings', 'staynexus-hotel-manager' ),
 		);
 
 		foreach ( $subpages as $slug => $title ) {
 			add_submenu_page(
-				'innflow-manager',
+				'staynexus-hotel-manager',
 				$title,
 				$title,
 				'manage_options',
@@ -53,30 +53,30 @@ class InnflowManagerAdmin {
 	}
 
 	public function render_app() {
-		echo '<div class="wrap"><div id="ifmpp-admin-root" class="ifmpp-admin-app"></div></div>';
+		echo '<div class="wrap"><div id="shmpp-admin-root" class="shmpp-admin-app"></div></div>';
 	}
 
 	public function enqueue_assets( $hook ) {
-		if ( false === strpos( $hook, 'innflow-manager' ) ) {
+		if ( false === strpos( $hook, 'staynexus-hotel-manager' ) ) {
 			return;
 		}
 
 		wp_enqueue_media();
 
-		$asset_file = InnflowManagerPLUGIN_DIR . 'assets/dist/admin.asset.php';
+		$asset_file = SHMPP_PLUGIN_DIR . 'assets/dist/admin.asset.php';
 		$asset      = file_exists( $asset_file )
 			? include $asset_file
 			: array(
 				'dependencies' => array(),
-				'version'      => InnflowManagerVERSION,
+				'version'      => SHMPP_VERSION,
 			);
 
-		$js  = InnflowManagerPLUGIN_URL . 'assets/dist/admin.js';
-		$css = InnflowManagerPLUGIN_URL . 'assets/dist/admin.css';
+		$js  = SHMPP_PLUGIN_URL . 'assets/dist/admin.js';
+		$css = SHMPP_PLUGIN_URL . 'assets/dist/admin.css';
 
-		if ( file_exists( InnflowManagerPLUGIN_DIR . 'assets/dist/admin.js' ) ) {
+		if ( file_exists( SHMPP_PLUGIN_DIR . 'assets/dist/admin.js' ) ) {
 			wp_enqueue_script(
-				'ifmpp-admin',
+				'shmpp-admin',
 				$js,
 				$asset['dependencies'],
 				$asset['version'],
@@ -84,23 +84,23 @@ class InnflowManagerAdmin {
 			);
 		}
 
-		if ( file_exists( InnflowManagerPLUGIN_DIR . 'assets/dist/admin.css' ) ) {
-			wp_enqueue_style( 'ifmpp-admin', $css, array(), $asset['version'] );
+		if ( file_exists( SHMPP_PLUGIN_DIR . 'assets/dist/admin.css' ) ) {
+			wp_enqueue_style( 'shmpp-admin', $css, array(), $asset['version'] );
 		}
 
-		$settings = get_option( 'ifmpp_settings', array() );
+		$settings = get_option( 'shmpp_settings', array() );
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Admin page slug for localized script only; capability checked by menu callback.
-		$page     = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : 'innflow-manager';
+		$page     = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : 'staynexus-hotel-manager';
 
 		wp_localize_script(
-			'ifmpp-admin',
-			'ifmppAdmin',
+			'shmpp-admin',
+			'shmppAdmin',
 			array(
-				'apiUrl'   => esc_url_raw( rest_url( 'innflow-manager/v1' ) ),
+				'apiUrl'   => esc_url_raw( rest_url( 'staynexushm/v1' ) ),
 				'nonce'    => wp_create_nonce( 'wp_rest' ),
 				'page'     => $page,
 				'settings' => $settings,
-				'pluginUrl'=> InnflowManagerPLUGIN_URL,
+				'pluginUrl'=> SHMPP_PLUGIN_URL,
 				'adminUrl' => admin_url( 'admin.php' ),
 			)
 		);

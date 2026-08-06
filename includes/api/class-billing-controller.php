@@ -1,12 +1,12 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted InnflowManagerDatabase::table() keys.
+// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
-class InnflowManagerBilling_Controller {
+class ShmppBillingController {
 
-	const NS = 'innflow-manager/v1';
+	const NS = 'staynexushm/v1';
 
 	public function register_routes() {
 		register_rest_route(
@@ -15,7 +15,7 @@ class InnflowManagerBilling_Controller {
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'overview' ),
-				'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+				'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 			)
 		);
 
@@ -26,12 +26,12 @@ class InnflowManagerBilling_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_room_bills' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_room_bill' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -43,12 +43,12 @@ class InnflowManagerBilling_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_restaurant_bills' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_restaurant_bill' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -60,12 +60,12 @@ class InnflowManagerBilling_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_non_border' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_non_border' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -77,12 +77,12 @@ class InnflowManagerBilling_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_laundry' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_laundry' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -94,12 +94,12 @@ class InnflowManagerBilling_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_damage' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_damage' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -120,13 +120,13 @@ class InnflowManagerBilling_Controller {
 				array(
 					'methods'             => WP_REST_Server::DELETABLE,
 					'callback'            => function ( $request ) use ( $type ) {
-						$result = InnflowManagerTrash::trash( $type, (int) $request['id'] );
+						$result = ShmppTrash::trash( $type, (int) $request['id'] );
 						if ( is_wp_error( $result ) ) {
 							return $result;
 						}
 						return rest_ensure_response( array( 'trashed' => true, 'id' => (int) $request['id'], 'type' => $type ) );
 					},
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				)
 			);
 		}
@@ -138,12 +138,12 @@ class InnflowManagerBilling_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_payment_types' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_public' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_public' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_payment_type' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -177,7 +177,7 @@ class InnflowManagerBilling_Controller {
 	public function list_room_bills() {
 		global $wpdb;
 		$rows = $wpdb->get_results(
-			'SELECT * FROM ' . InnflowManagerDatabase::table( 'room_bills' ) . ' WHERE ' . InnflowManagerTrash::alive_sql() . ' ORDER BY bill_date DESC LIMIT 200',
+			'SELECT * FROM ' . ShmppDatabase::table( 'room_bills' ) . ' WHERE ' . ShmppTrash::alive_sql() . ' ORDER BY bill_date DESC LIMIT 200',
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -185,7 +185,7 @@ class InnflowManagerBilling_Controller {
 
 	public function create_room_bill( $request ) {
 		global $wpdb;
-		$settings = get_option( 'ifmpp_settings', array() );
+		$settings = get_option( 'shmpp_settings', array() );
 		$tax_rate = isset( $settings['tax_rate'] ) ? (float) $settings['tax_rate'] : 0;
 		$amount   = (float) $request->get_param( 'amount' );
 		$tax      = round( $amount * ( $tax_rate / 100 ), 2 );
@@ -200,18 +200,18 @@ class InnflowManagerBilling_Controller {
 			'payment_status'          => sanitize_text_field( $request->get_param( 'payment_status' ) ?: 'unpaid' ),
 			'offline_payment_type_id' => $request->get_param( 'offline_payment_type_id' ) ? (int) $request->get_param( 'offline_payment_type_id' ) : null,
 		);
-		$wpdb->insert( InnflowManagerDatabase::table( 'room_bills' ), $data );
+		$wpdb->insert( ShmppDatabase::table( 'room_bills' ), $data );
 		$id = (int) $wpdb->insert_id;
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . InnflowManagerDatabase::table( 'room_bills' ) . ' WHERE id = %d', $id ), ARRAY_A );
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . ShmppDatabase::table( 'room_bills' ) . ' WHERE id = %d', $id ), ARRAY_A );
 		return rest_ensure_response( $row );
 	}
 
 	public function list_restaurant_bills() {
 		global $wpdb;
-		$bills  = InnflowManagerDatabase::table( 'restaurant_bills' );
-		$rest   = InnflowManagerDatabase::table( 'restaurants' );
+		$bills  = ShmppDatabase::table( 'restaurant_bills' );
+		$rest   = ShmppDatabase::table( 'restaurants' );
 		$rows   = $wpdb->get_results(
-			"SELECT b.*, r.name AS restaurant_name FROM {$bills} b LEFT JOIN {$rest} r ON r.id = b.restaurant_id WHERE " . InnflowManagerTrash::alive_sql( 'b' ) . ' ORDER BY b.bill_date DESC LIMIT 200',
+			"SELECT b.*, r.name AS restaurant_name FROM {$bills} b LEFT JOIN {$rest} r ON r.id = b.restaurant_id WHERE " . ShmppTrash::alive_sql( 'b' ) . ' ORDER BY b.bill_date DESC LIMIT 200',
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -219,7 +219,7 @@ class InnflowManagerBilling_Controller {
 
 	public function create_restaurant_bill( $request ) {
 		global $wpdb;
-		$settings = get_option( 'ifmpp_settings', array() );
+		$settings = get_option( 'shmpp_settings', array() );
 		$tax_rate = isset( $settings['tax_rate'] ) ? (float) $settings['tax_rate'] : 0;
 		$subtotal = (float) $request->get_param( 'subtotal' );
 		$tax      = round( $subtotal * ( $tax_rate / 100 ), 2 );
@@ -234,14 +234,14 @@ class InnflowManagerBilling_Controller {
 			'offline_payment_type_id' => $request->get_param( 'offline_payment_type_id' ) ? (int) $request->get_param( 'offline_payment_type_id' ) : null,
 			'notes'                   => sanitize_textarea_field( $request->get_param( 'notes' ) ),
 		);
-		$wpdb->insert( InnflowManagerDatabase::table( 'restaurant_bills' ), $data );
+		$wpdb->insert( ShmppDatabase::table( 'restaurant_bills' ), $data );
 		$bill_id = (int) $wpdb->insert_id;
 
 		$guest_id   = (int) $request->get_param( 'guest_id' );
 		$booking_id = $request->get_param( 'booking_id' ) ? (int) $request->get_param( 'booking_id' ) : null;
 		if ( $guest_id ) {
 			$wpdb->insert(
-				InnflowManagerDatabase::table( 'restaurant_guest_bills' ),
+				ShmppDatabase::table( 'restaurant_guest_bills' ),
 				array(
 					'restaurant_bill_id' => $bill_id,
 					'guest_id'           => $guest_id,
@@ -251,14 +251,14 @@ class InnflowManagerBilling_Controller {
 			);
 		}
 
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . InnflowManagerDatabase::table( 'restaurant_bills' ) . ' WHERE id = %d', $bill_id ), ARRAY_A );
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . ShmppDatabase::table( 'restaurant_bills' ) . ' WHERE id = %d', $bill_id ), ARRAY_A );
 		return rest_ensure_response( $row );
 	}
 
 	public function list_non_border() {
 		global $wpdb;
 		$rows = $wpdb->get_results(
-			'SELECT * FROM ' . InnflowManagerDatabase::table( 'non_border_restaurant_bills' ) . ' WHERE ' . InnflowManagerTrash::alive_sql() . ' ORDER BY bill_date DESC LIMIT 200',
+			'SELECT * FROM ' . ShmppDatabase::table( 'non_border_restaurant_bills' ) . ' WHERE ' . ShmppTrash::alive_sql() . ' ORDER BY bill_date DESC LIMIT 200',
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -266,7 +266,7 @@ class InnflowManagerBilling_Controller {
 
 	public function create_non_border( $request ) {
 		global $wpdb;
-		$settings = get_option( 'ifmpp_settings', array() );
+		$settings = get_option( 'shmpp_settings', array() );
 		$tax_rate = isset( $settings['tax_rate'] ) ? (float) $settings['tax_rate'] : 0;
 		$subtotal = (float) $request->get_param( 'subtotal' );
 		$tax      = round( $subtotal * ( $tax_rate / 100 ), 2 );
@@ -283,16 +283,16 @@ class InnflowManagerBilling_Controller {
 			'offline_payment_type_id' => $request->get_param( 'offline_payment_type_id' ) ? (int) $request->get_param( 'offline_payment_type_id' ) : null,
 			'notes'                   => sanitize_textarea_field( $request->get_param( 'notes' ) ),
 		);
-		$wpdb->insert( InnflowManagerDatabase::table( 'non_border_restaurant_bills' ), $data );
+		$wpdb->insert( ShmppDatabase::table( 'non_border_restaurant_bills' ), $data );
 		$id  = (int) $wpdb->insert_id;
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . InnflowManagerDatabase::table( 'non_border_restaurant_bills' ) . ' WHERE id = %d', $id ), ARRAY_A );
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . ShmppDatabase::table( 'non_border_restaurant_bills' ) . ' WHERE id = %d', $id ), ARRAY_A );
 		return rest_ensure_response( $row );
 	}
 
 	public function list_laundry() {
 		global $wpdb;
 		$rows = $wpdb->get_results(
-			'SELECT * FROM ' . InnflowManagerDatabase::table( 'laundry_bills' ) . ' WHERE ' . InnflowManagerTrash::alive_sql() . ' ORDER BY bill_date DESC LIMIT 200',
+			'SELECT * FROM ' . ShmppDatabase::table( 'laundry_bills' ) . ' WHERE ' . ShmppTrash::alive_sql() . ' ORDER BY bill_date DESC LIMIT 200',
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -300,7 +300,7 @@ class InnflowManagerBilling_Controller {
 
 	public function create_laundry( $request ) {
 		global $wpdb;
-		$settings = get_option( 'ifmpp_settings', array() );
+		$settings = get_option( 'shmpp_settings', array() );
 		$tax_rate = isset( $settings['tax_rate'] ) ? (float) $settings['tax_rate'] : 0;
 		$amount   = (float) $request->get_param( 'amount' );
 		$tax      = round( $amount * ( $tax_rate / 100 ), 2 );
@@ -316,16 +316,16 @@ class InnflowManagerBilling_Controller {
 			'payment_status'          => sanitize_text_field( $request->get_param( 'payment_status' ) ?: 'unpaid' ),
 			'offline_payment_type_id' => $request->get_param( 'offline_payment_type_id' ) ? (int) $request->get_param( 'offline_payment_type_id' ) : null,
 		);
-		$wpdb->insert( InnflowManagerDatabase::table( 'laundry_bills' ), $data );
+		$wpdb->insert( ShmppDatabase::table( 'laundry_bills' ), $data );
 		$id  = (int) $wpdb->insert_id;
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . InnflowManagerDatabase::table( 'laundry_bills' ) . ' WHERE id = %d', $id ), ARRAY_A );
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . ShmppDatabase::table( 'laundry_bills' ) . ' WHERE id = %d', $id ), ARRAY_A );
 		return rest_ensure_response( $row );
 	}
 
 	public function list_damage() {
 		global $wpdb;
 		$rows = $wpdb->get_results(
-			'SELECT * FROM ' . InnflowManagerDatabase::table( 'damage_bills' ) . ' WHERE ' . InnflowManagerTrash::alive_sql() . ' ORDER BY bill_date DESC LIMIT 200',
+			'SELECT * FROM ' . ShmppDatabase::table( 'damage_bills' ) . ' WHERE ' . ShmppTrash::alive_sql() . ' ORDER BY bill_date DESC LIMIT 200',
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -333,7 +333,7 @@ class InnflowManagerBilling_Controller {
 
 	public function create_damage( $request ) {
 		global $wpdb;
-		$settings = get_option( 'ifmpp_settings', array() );
+		$settings = get_option( 'shmpp_settings', array() );
 		$tax_rate = isset( $settings['tax_rate'] ) ? (float) $settings['tax_rate'] : 0;
 		$amount   = (float) $request->get_param( 'amount' );
 		$tax      = round( $amount * ( $tax_rate / 100 ), 2 );
@@ -349,16 +349,16 @@ class InnflowManagerBilling_Controller {
 			'payment_status'          => sanitize_text_field( $request->get_param( 'payment_status' ) ?: 'unpaid' ),
 			'offline_payment_type_id' => $request->get_param( 'offline_payment_type_id' ) ? (int) $request->get_param( 'offline_payment_type_id' ) : null,
 		);
-		$wpdb->insert( InnflowManagerDatabase::table( 'damage_bills' ), $data );
+		$wpdb->insert( ShmppDatabase::table( 'damage_bills' ), $data );
 		$id  = (int) $wpdb->insert_id;
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . InnflowManagerDatabase::table( 'damage_bills' ) . ' WHERE id = %d', $id ), ARRAY_A );
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . ShmppDatabase::table( 'damage_bills' ) . ' WHERE id = %d', $id ), ARRAY_A );
 		return rest_ensure_response( $row );
 	}
 
 	public function list_payment_types() {
 		global $wpdb;
 		$rows = $wpdb->get_results(
-			'SELECT * FROM ' . InnflowManagerDatabase::table( 'offline_payment_types' ) . ' WHERE is_active = 1 AND ' . InnflowManagerTrash::alive_sql() . ' ORDER BY name ASC',
+			'SELECT * FROM ' . ShmppDatabase::table( 'offline_payment_types' ) . ' WHERE is_active = 1 AND ' . ShmppTrash::alive_sql() . ' ORDER BY name ASC',
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -369,7 +369,7 @@ class InnflowManagerBilling_Controller {
 		$name = sanitize_text_field( $request->get_param( 'name' ) );
 		$slug = sanitize_title( $name );
 		$wpdb->insert(
-			InnflowManagerDatabase::table( 'offline_payment_types' ),
+			ShmppDatabase::table( 'offline_payment_types' ),
 			array(
 				'name'        => $name,
 				'slug'        => $slug,
@@ -378,7 +378,7 @@ class InnflowManagerBilling_Controller {
 			)
 		);
 		$id  = (int) $wpdb->insert_id;
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . InnflowManagerDatabase::table( 'offline_payment_types' ) . ' WHERE id = %d', $id ), ARRAY_A );
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . ShmppDatabase::table( 'offline_payment_types' ) . ' WHERE id = %d', $id ), ARRAY_A );
 		return rest_ensure_response( $row );
 	}
 
@@ -403,10 +403,10 @@ class InnflowManagerBilling_Controller {
 
 	private function sum_table( $table_key, $column, $date_col, $range ) {
 		global $wpdb;
-		$table = InnflowManagerDatabase::table( $table_key );
+		$table = ShmppDatabase::table( $table_key );
 		$sum   = $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COALESCE(SUM({$column}),0) FROM {$table} WHERE " . InnflowManagerTrash::alive_sql() . " AND DATE({$date_col}) BETWEEN %s AND %s",
+				"SELECT COALESCE(SUM({$column}),0) FROM {$table} WHERE " . ShmppTrash::alive_sql() . " AND DATE({$date_col}) BETWEEN %s AND %s",
 				$range['from'],
 				$range['to']
 			)

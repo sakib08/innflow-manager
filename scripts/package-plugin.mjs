@@ -6,7 +6,7 @@
  *   npm run plugin-zip
  *   node scripts/package-plugin.mjs --skip-build
  *
- * ZIP is written to ../innflow-manager-builds/ (outside the plugin folder).
+ * ZIP is written to ../staynexus-hotel-manager-builds/ (outside the plugin folder).
  * Source for minified JS/CSS is published at the GitHub URL in readme.txt.
  */
 import { spawnSync } from 'child_process';
@@ -16,12 +16,12 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname( fileURLToPath( import.meta.url ) );
 const root = path.resolve( __dirname, '..' );
-const pluginSlug = 'innflow-manager';
+const pluginSlug = 'staynexus-hotel-manager';
 const skipBuild = process.argv.includes( '--skip-build' );
 
 function readVersion() {
 	const pkg = JSON.parse( fs.readFileSync( path.join( root, 'package.json' ), 'utf8' ) );
-	const main = fs.readFileSync( path.join( root, 'innflow-manager.php' ), 'utf8' );
+	const main = fs.readFileSync( path.join( root, 'staynexus-hotel-manager.php' ), 'utf8' );
 	const match = main.match( /^\s*\*\s*Version:\s*([^\s]+)/m );
 	const phpVersion = match ? match[1].trim() : null;
 	if ( phpVersion && phpVersion !== pkg.version ) {
@@ -51,7 +51,7 @@ function ensureZipAvailable() {
 }
 
 const version = readVersion();
-const outDir = path.resolve( root, '..', 'innflow-manager-builds' );
+const outDir = path.resolve( root, '..', 'staynexus-hotel-manager-builds' );
 const zipName = `${pluginSlug}-${version}.zip`;
 const zipPath = path.join( outDir, zipName );
 const stagingRoot = path.join( outDir, '_staging' );
@@ -88,8 +88,7 @@ fs.mkdirSync( outDir, { recursive: true } );
 
 // Production plugin only. JS/CSS source is linked from readme.txt (== Source code ==).
 const includePaths = [
-	'innflow-manager.php',
-	'hotel-booking.php',
+	'staynexus-hotel-manager.php',
 	'readme.txt',
 	'includes',
 	'assets/dist',
