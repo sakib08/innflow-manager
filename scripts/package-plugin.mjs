@@ -52,7 +52,7 @@ function ensureZipAvailable() {
 
 const version = readVersion();
 const outDir = path.resolve( root, '..', 'staynexus-hotel-manager-builds' );
-const zipName = `${pluginSlug}-${version}.zip`;
+const zipName = `${pluginSlug}.zip`;
 const zipPath = path.join( outDir, zipName );
 const stagingRoot = path.join( outDir, '_staging' );
 const stagingPlugin = path.join( stagingRoot, pluginSlug );

@@ -4,7 +4,7 @@ Tags: hotel, booking, reservations, hospitality, rooms
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -54,13 +54,14 @@ No. Production assets are included under `assets/dist/`.
 3. Frontend booking search shortcode.
 
 == Changelog ==
-
+= 1.0.1 =
+Initial release of StayNexus Hotel Manager.
 = 1.0.0 =
 * Initial release.
 
 == Upgrade Notice ==
 
-= 1.0.0 =
+= 1.0.1 =
 Initial release of StayNexus Hotel Manager.
 
 == Source code ==
