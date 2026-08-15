@@ -25,7 +25,7 @@ class ShmppFrontend {
 	}
 
 	private function __construct() {
-		add_shortcode( 'staynexus_hotel_manager_search', array( $this, 'render_search' ) );
+		add_shortcode( 'shmpp_search', array( $this, 'render_search' ) );
 		add_filter( 'the_posts', array( $this, 'detect_shortcode' ), 10, 2 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'register_assets' ), 5 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'maybe_enqueue' ), 20 );
@@ -44,7 +44,7 @@ class ShmppFrontend {
 			if ( ! is_object( $post ) || empty( $post->post_content ) ) {
 				continue;
 			}
-			if ( has_shortcode( $post->post_content, 'staynexus_hotel_manager_search' ) ) {
+			if ( has_shortcode( $post->post_content, 'shmpp_search' ) ) {
 				$this->shortcode_present = true;
 				break;
 			}
@@ -152,7 +152,7 @@ class ShmppFrontend {
 				'title' => __( 'Find Your Stay', 'staynexus-hotel-manager' ),
 			),
 			$atts,
-			'staynexus_hotel_manager_search'
+			'shmpp_search'
 		);
 
 		$this->shortcode_present = true;

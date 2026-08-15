@@ -21,7 +21,7 @@ class ShmppBookingsController {
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_booking' ),
-					'permission_callback' => array( 'ShmppRestAPI', 'permission_public' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -243,6 +243,8 @@ class ShmppBookingsController {
 			'subtotal'                => $subtotal,
 			'tax_amount'              => $tax,
 			'total_amount'            => $total,
+			// This endpoint requires 'manage_options'; staff creating a booking may record
+			// the payment status directly (e.g. paid in person at check-in).
 			'payment_status'          => sanitize_text_field( $request->get_param( 'payment_status' ) ?: 'pending' ),
 			'booking_status'          => 'confirmed',
 			'offline_payment_type_id' => $request->get_param( 'offline_payment_type_id' )

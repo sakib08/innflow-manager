@@ -3,7 +3,7 @@
  * Plugin Name:       StayNexus Hotel Manager
  * Plugin URI:        https://pluginpros.co
  * Description:       Hotel operations, reservations, billing, and staff management.
- * Version:           1.0.1
+ * Version:           1.0.2
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Tested up to:      7.0
@@ -20,13 +20,13 @@ if ( defined( 'SHMPP_VERSION' ) ) {
 	return;
 }
 
-define( 'SHMPP_VERSION', '1.0.1' );
+define( 'SHMPP_VERSION', '1.0.2' );
 define( 'SHMPP_PLUGIN_FILE', __FILE__ );
 define( 'SHMPP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SHMPP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'SHMPP_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 
-require_once SHMPP_PLUGIN_DIR . 'includes/class-autoloader.php';
+require_once SHMPP_PLUGIN_DIR . 'includes/class-shmpp-autoloader.php';
 ShmppAutoloader::register();
 
 register_activation_hook( __FILE__, array( 'ShmppActivator', 'activate' ) );

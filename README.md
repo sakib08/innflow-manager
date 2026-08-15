@@ -5,7 +5,7 @@ React + Tailwind hotel management and booking plugin.
 ## Features
 
 - React admin dashboard (day / week / month guest & billing overview)
-- React frontend search & booking via shortcode `[staynexus_hotel_manager_search]`
+- React frontend search & booking via shortcode `[shmpp_search]`
 - Custom database tables for rooms, amenities, date slots, guests, bookings, check-in/out, billing (room, restaurant, walk-in, laundry, damage), discounts, payment types, restaurants, employees, roles, salaries
 - REST API under `/wp-json/staynexushm/v1/`
 
@@ -20,7 +20,7 @@ npm install
 npm run build
 ```
 
-3. Add shortcode to any page: `[staynexus_hotel_manager_search]`
+3. Add shortcode to any page: `[shmpp_search]`
 
 ## Build / release
 

@@ -6,7 +6,7 @@ defined( 'ABSPATH' ) || exit;
 
 class ShmppDatabase {
 
-	const DB_VERSION = '1.6.0';
+	const DB_VERSION = '1.7.0';
 
 	public static function table( $name ) {
 		global $wpdb;
@@ -450,12 +450,18 @@ class ShmppDatabase {
 		$legacy_prefixes = array( 'ifmpp_', 'ifm_', 'hb_' );
 
 		foreach ( $suffixes as $suffix ) {
-			$new = $wpdb->prefix . 'shmpp_' . $suffix;
+			$new = self::safe_identifier( $wpdb->prefix . 'shmpp_' . $suffix );
+			if ( ! $new ) {
+				continue;
+			}
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$new_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $new ) );
 
 			foreach ( $legacy_prefixes as $legacy_prefix ) {
-				$old = $wpdb->prefix . $legacy_prefix . $suffix;
+				$old = self::safe_identifier( $wpdb->prefix . $legacy_prefix . $suffix );
+				if ( ! $old ) {
+					continue;
+				}
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$old_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $old ) );
 				if ( ! $old_exists ) {
@@ -463,30 +469,59 @@ class ShmppDatabase {
 				}
 
 				if ( $new_exists ) {
-					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- identifiers vetted by self::safe_identifier().
 					$old_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$old}`" );
 					if ( $old_count > 0 ) {
 						// Prefer legacy data over newly created empty/demo ifmpp_ tables.
-						// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+						// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- identifiers vetted by self::safe_identifier().
 						$wpdb->query( "DROP TABLE `{$new}`" );
-						// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+						// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- identifiers vetted by self::safe_identifier().
 						$wpdb->query( "RENAME TABLE `{$old}` TO `{$new}`" );
 						$new_exists = true;
 					}
 					continue;
 				}
 
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- identifiers vetted by self::safe_identifier().
 				$wpdb->query( "RENAME TABLE `{$old}` TO `{$new}`" );
 				$new_exists = true;
 			}
 		}
 
-		// Update shortcodes in content.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// Update shortcodes in content (legacy tag, then the pre-rename shmpp_search tag).
 		$wpdb->query(
-			"UPDATE {$wpdb->posts} SET post_content = REPLACE(post_content, '[hotel_booking_search', '[staynexus_hotel_manager_search') WHERE post_content LIKE '%[hotel_booking_search%'"
+			$wpdb->prepare(
+				"UPDATE {$wpdb->posts} SET post_content = REPLACE(post_content, %s, %s) WHERE post_content LIKE %s",
+				'[hotel_booking_search',
+				'[shmpp_search',
+				'%[hotel_booking_search%'
+			)
 		);
+		$wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$wpdb->posts} SET post_content = REPLACE(post_content, %s, %s) WHERE post_content LIKE %s",
+				'[staynexus_hotel_manager_search',
+				'[shmpp_search',
+				'%[staynexus_hotel_manager_search%'
+			)
+		);
+	}
+
+	/**
+	 * Validate a table identifier before it is interpolated into a query.
+	 *
+	 * wpdb::prepare() cannot parameterize identifiers (table/column names), so any
+	 * identifier built from a variable must be allow-listed against a strict pattern
+	 * before use. Returns the identifier unchanged if safe, or null if it is not.
+	 *
+	 * @param string $identifier Fully-qualified table name to validate.
+	 * @return string|null
+	 */
+	private static function safe_identifier( $identifier ) {
+		if ( is_string( $identifier ) && preg_match( '/^[A-Za-z0-9_]+$/', $identifier ) ) {
+			return $identifier;
+		}
+		return null;
 	}
 
 	/**
