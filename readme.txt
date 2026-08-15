@@ -4,7 +4,7 @@ Tags: hotel, booking, reservations, hospitality, rooms
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -54,6 +54,9 @@ No. Production assets are included under `assets/dist/`.
 3. Frontend booking search shortcode.
 
 == Changelog ==
+= 1.0.3 =
+* Prefixed all PHP class filenames with `class-shmpp-` and updated the autoloader map.
+* Confirmed REST routes use `permission_callback`, text domain matches the plugin slug, and SQL identifiers are allow-listed.
 = 1.0.2 =
 * Fixed text domain to match the plugin slug (staynexus-hotel-manager).
 * Renamed the frontend shortcode to the plugin-prefixed `[shmpp_search]` (old `[staynexus_hotel_manager_search]` and `[hotel_booking_search]` shortcodes in existing content are migrated automatically).
@@ -65,6 +68,8 @@ Initial release of StayNexus Hotel Manager.
 
 == Upgrade Notice ==
 
+= 1.0.3 =
+Class files renamed to class-shmpp-*; no user-facing shortcode or data changes.
 = 1.0.2 =
 Shortcode renamed to [shmpp_search]; existing content is migrated automatically on upgrade.
 = 1.0.1 =

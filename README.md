@@ -34,7 +34,7 @@ npm run build
 
 ```bash
 npm run plugin-zip
-# → ../staynexus-hotel-manager-builds/staynexus-hotel-manager-1.0.0.zip
+# → ../staynexus-hotel-manager-builds/staynexus-hotel-manager-1.0.3.zip
 ```
 
 The ZIP contains PHP, `includes/`, built `assets/dist/`, and `readme.txt` (no `node_modules`, no `.git`). Source for minified assets: https://github.com/sakib08/innflow-manager
