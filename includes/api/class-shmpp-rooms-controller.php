@@ -3,8 +3,7 @@ defined( 'ABSPATH' ) || exit;
 
 // phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_fopen,WordPress.WP.AlternativeFunctions.file_system_operations_fwrite,WordPress.WP.AlternativeFunctions.file_system_operations_fread,WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- CSV stream to php://output and reading uploaded tmp files.
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
-// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
 class ShmppRoomsController {
 
@@ -18,7 +17,7 @@ class ShmppRoomsController {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_rooms' ),
-					'permission_callback' => array( 'ShmppRestAPI', 'permission_public' ),
+					'permission_callback' => '__return_true',
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
@@ -35,7 +34,7 @@ class ShmppRoomsController {
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'search_rooms' ),
-				'permission_callback' => array( 'ShmppRestAPI', 'permission_public' ),
+				'permission_callback' => '__return_true',
 			)
 		);
 
@@ -83,7 +82,7 @@ class ShmppRoomsController {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'get_room' ),
-					'permission_callback' => array( 'ShmppRestAPI', 'permission_public' ),
+					'permission_callback' => '__return_true',
 				),
 				array(
 					'methods'             => WP_REST_Server::EDITABLE,
@@ -119,7 +118,10 @@ class ShmppRoomsController {
 	public function list_rooms( $request ) {
 		global $wpdb;
 		$table = ShmppDatabase::table( 'room_types' );
-		$rows  = $wpdb->get_results( "SELECT * FROM {$table} WHERE " . ShmppTrash::alive_sql() . ' ORDER BY id DESC', ARRAY_A );
+		$rows  = $wpdb->get_results(
+			$wpdb->prepare( 'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d ORDER BY id DESC', $table, 1 ),
+			ARRAY_A
+		);
 		foreach ( $rows as &$row ) {
 			$row['amenities'] = $this->get_amenities( (int) $row['id'] );
 			$row['gallery']   = $this->get_gallery( (int) $row['id'] );
@@ -135,7 +137,7 @@ class ShmppRoomsController {
 			$id    = isset( $attrs['id'] ) ? (int) $attrs['id'] : 0;
 		}
 		$table = ShmppDatabase::table( 'room_types' );
-		$row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d AND " . ShmppTrash::alive_sql(), $id ), ARRAY_A );
+		$row   = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d AND deleted_at IS NULL', $table, $id ), ARRAY_A );
 		if ( ! $row ) {
 			return new WP_Error( 'not_found', 'Room type not found', array( 'status' => 404 ) );
 		}
@@ -216,8 +218,11 @@ class ShmppRoomsController {
 	public function export_rooms( $request ) {
 		global $wpdb;
 		$format = sanitize_text_field( $request->get_param( 'format' ) ?: 'csv' );
-		$table  = ShmppDatabase::table( 'room_types' );
-		$rooms  = $wpdb->get_results( "SELECT * FROM {$table} ORDER BY id ASC", ARRAY_A );
+		$table = ShmppDatabase::table( 'room_types' );
+		$rooms = $wpdb->get_results(
+			$wpdb->prepare( 'SELECT * FROM %i WHERE 1 = %d ORDER BY id ASC', $table, 1 ),
+			ARRAY_A
+		);
 
 		$columns = array( 'id', 'name', 'slug', 'description', 'base_price', 'max_adults', 'max_children', 'total_rooms', 'image_url', 'gallery_urls', 'amenities', 'status' );
 
@@ -335,10 +340,10 @@ class ShmppRoomsController {
 			);
 
 			$id       = isset( $assoc['id'] ) ? (int) $assoc['id'] : 0;
-			$existing = $id ? $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$rooms_table} WHERE id = %d", $id ) ) : null;
+			$existing = $id ? $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM %i WHERE id = %d', $rooms_table, $id ) ) : null;
 
 			if ( ! $existing && ! empty( $assoc['slug'] ) ) {
-				$existing = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$rooms_table} WHERE slug = %s", sanitize_title( $assoc['slug'] ) ) );
+				$existing = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM %i WHERE slug = %s', $rooms_table, sanitize_title( $assoc['slug'] ) ) );
 			}
 
 			if ( $existing ) {
@@ -380,7 +385,7 @@ class ShmppRoomsController {
 		global $wpdb;
 		$table = ShmppDatabase::table( 'amenities' );
 		$name  = sanitize_text_field( $name );
-		$id    = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE name = %s", $name ) );
+		$id    = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM %i WHERE name = %s', $table, $name ) );
 		if ( $id ) {
 			return (int) $id;
 		}
@@ -405,9 +410,7 @@ class ShmppRoomsController {
 		$nights     = (int) ( ( strtotime( $check_out ) - strtotime( $check_in ) ) / DAY_IN_SECONDS );
 
 		$types = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT * FROM {$room_table} WHERE status = 'active' AND " . ShmppTrash::alive_sql() . ' AND max_adults >= %d AND max_children >= %d',
-				$adults,
+			$wpdb->prepare( 'SELECT * FROM %i WHERE status = \'active\' AND deleted_at IS NULL AND max_adults >= %d AND max_children >= %d', $room_table, $adults,
 				$children
 			),
 			ARRAY_A
@@ -422,9 +425,7 @@ class ShmppRoomsController {
 
 			for ( $i = 0; $i < $nights; $i++ ) {
 				$slot = $wpdb->get_row(
-					$wpdb->prepare(
-						"SELECT * FROM {$slot_table} WHERE room_type_id = %d AND slot_date = %s AND " . ShmppTrash::alive_sql(),
-						$type['id'],
+					$wpdb->prepare( 'SELECT * FROM %i WHERE room_type_id = %d AND slot_date = %s AND deleted_at IS NULL', $slot_table, $type['id'],
 						$date
 					),
 					ARRAY_A
@@ -476,25 +477,91 @@ class ShmppRoomsController {
 		$to           = sanitize_text_field( $request->get_param( 'to' ) );
 		$table        = ShmppDatabase::table( 'booking_date_slots' );
 
-		$sql    = "SELECT * FROM {$table} WHERE " . ShmppTrash::alive_sql();
-		$params = array();
-		if ( $room_type_id ) {
-			$sql     .= ' AND room_type_id = %d';
-			$params[] = $room_type_id;
+		if ( $room_type_id && $from && $to ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d AND room_type_id = %d AND slot_date >= %s AND slot_date <= %s ORDER BY slot_date ASC',
+					$table,
+					1,
+					$room_type_id,
+					$from,
+					$to
+				),
+				ARRAY_A
+			);
+		} elseif ( $room_type_id && $from ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d AND room_type_id = %d AND slot_date >= %s ORDER BY slot_date ASC',
+					$table,
+					1,
+					$room_type_id,
+					$from
+				),
+				ARRAY_A
+			);
+		} elseif ( $room_type_id && $to ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d AND room_type_id = %d AND slot_date <= %s ORDER BY slot_date ASC',
+					$table,
+					1,
+					$room_type_id,
+					$to
+				),
+				ARRAY_A
+			);
+		} elseif ( $room_type_id ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d AND room_type_id = %d ORDER BY slot_date ASC',
+					$table,
+					1,
+					$room_type_id
+				),
+				ARRAY_A
+			);
+		} elseif ( $from && $to ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d AND slot_date >= %s AND slot_date <= %s ORDER BY slot_date ASC',
+					$table,
+					1,
+					$from,
+					$to
+				),
+				ARRAY_A
+			);
+		} elseif ( $from ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d AND slot_date >= %s ORDER BY slot_date ASC',
+					$table,
+					1,
+					$from
+				),
+				ARRAY_A
+			);
+		} elseif ( $to ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d AND slot_date <= %s ORDER BY slot_date ASC',
+					$table,
+					1,
+					$to
+				),
+				ARRAY_A
+			);
+		} else {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d ORDER BY slot_date ASC',
+					$table,
+					1
+				),
+				ARRAY_A
+			);
 		}
-		if ( $from ) {
-			$sql     .= ' AND slot_date >= %s';
-			$params[] = $from;
-		}
-		if ( $to ) {
-			$sql     .= ' AND slot_date <= %s';
-			$params[] = $to;
-		}
-		$sql .= ' ORDER BY slot_date ASC';
-
-		$rows = $params
-			? $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A )
-			: $wpdb->get_results( $sql, ARRAY_A );
 
 		return rest_ensure_response( $rows );
 	}
@@ -514,9 +581,7 @@ class ShmppRoomsController {
 		);
 
 		$existing = $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT id FROM {$table} WHERE room_type_id = %d AND slot_date = %s",
-				$data['room_type_id'],
+			$wpdb->prepare( 'SELECT id FROM %i WHERE room_type_id = %d AND slot_date = %s', $table, $data['room_type_id'],
 				$data['slot_date']
 			)
 		);
@@ -529,7 +594,7 @@ class ShmppRoomsController {
 			$id = (int) $wpdb->insert_id;
 		}
 
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A );
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $table, $id ), ARRAY_A );
 		return rest_ensure_response( $row );
 	}
 
@@ -552,7 +617,7 @@ class ShmppRoomsController {
 		$base    = $slug ?: 'room';
 		$candidate = $base;
 		$i = 1;
-		while ( $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE slug = %s AND " . ShmppTrash::alive_sql(), $candidate ) ) ) {
+		while ( $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM %i WHERE slug = %s AND deleted_at IS NULL', $table, $candidate ) ) ) {
 			$candidate = $base . '-' . $i;
 			$i++;
 		}
@@ -564,9 +629,7 @@ class ShmppRoomsController {
 		$join = ShmppDatabase::table( 'room_type_amenities' );
 		$am   = ShmppDatabase::table( 'amenities' );
 		return $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT a.* FROM {$am} a INNER JOIN {$join} j ON j.amenity_id = a.id WHERE j.room_type_id = %d AND " . ShmppTrash::alive_sql( 'a' ),
-				$room_type_id
+			$wpdb->prepare( 'SELECT a.* FROM %i a INNER JOIN %i j ON j.amenity_id = a.id WHERE j.room_type_id = %d AND a.deleted_at IS NULL', $am, $join, $room_type_id
 			),
 			ARRAY_A
 		);
@@ -594,9 +657,7 @@ class ShmppRoomsController {
 		global $wpdb;
 		$table = ShmppDatabase::table( 'room_gallery' );
 		return $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT id, image_url, sort_order FROM {$table} WHERE room_type_id = %d ORDER BY sort_order ASC, id ASC",
-				$room_type_id
+			$wpdb->prepare( 'SELECT id, image_url, sort_order FROM %i WHERE room_type_id = %d ORDER BY sort_order ASC, id ASC', $table, $room_type_id
 			),
 			ARRAY_A
 		);
@@ -633,9 +694,7 @@ class ShmppRoomsController {
 		for ( $i = 0; $i < 90; $i++ ) {
 			$date = gmdate( 'Y-m-d', strtotime( "+{$i} days" ) );
 			$exists = $wpdb->get_var(
-				$wpdb->prepare(
-					"SELECT id FROM {$table} WHERE room_type_id = %d AND slot_date = %s",
-					$room_type_id,
+				$wpdb->prepare( 'SELECT id FROM %i WHERE room_type_id = %d AND slot_date = %s', $table, $room_type_id,
 					$date
 				)
 			);

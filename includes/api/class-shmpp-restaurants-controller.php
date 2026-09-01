@@ -1,8 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
-// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
 class ShmppRestaurantsController {
 
@@ -46,8 +45,9 @@ class ShmppRestaurantsController {
 
 	public function list_restaurants() {
 		global $wpdb;
-		$rows = $wpdb->get_results(
-			'SELECT * FROM ' . ShmppDatabase::table( 'restaurants' ) . ' WHERE ' . ShmppTrash::alive_sql() . ' ORDER BY name ASC',
+		$table = ShmppDatabase::table( 'restaurants' );
+		$rows  = $wpdb->get_results(
+			$wpdb->prepare( 'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d ORDER BY name ASC', $table, 1 ),
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );

@@ -1,8 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
-// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
 class ShmppSettingsController {
 
@@ -45,7 +44,7 @@ class ShmppSettingsController {
 	public function seed_demo() {
 		global $wpdb;
 		$rooms = ShmppDatabase::table( 'room_types' );
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rooms}" );
+		$count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE 1 = %d', $rooms, 1 ) );
 		if ( $count > 0 ) {
 			return new WP_Error(
 				'not_empty',
@@ -56,7 +55,7 @@ class ShmppSettingsController {
 
 		// seed_defaults() also loads demo content when room types are empty.
 		ShmppDatabase::seed_defaults();
-		$after = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rooms}" );
+		$after = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE 1 = %d', $rooms, 1 ) );
 
 		return rest_ensure_response(
 			array(

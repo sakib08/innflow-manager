@@ -1,10 +1,10 @@
 === StayNexus Hotel Manager ===
 Contributors: sakibbd08
 Tags: hotel, booking, reservations, hospitality, rooms
-Requires at least: 6.0
-Tested up to: 7.0
+Requires at least: 6.2
+Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.3
+Stable tag: 1.0.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,8 @@ Initial release of StayNexus Hotel Manager.
 
 == Upgrade Notice ==
 
+= 1.0.4 =
+Requires WordPress 6.2+ for prepared identifier placeholders in database queries.
 = 1.0.3 =
 Class files renamed to class-shmpp-*; no user-facing shortcode or data changes.
 = 1.0.2 =

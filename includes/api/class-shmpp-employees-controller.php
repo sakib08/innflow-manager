@@ -3,8 +3,7 @@ defined( 'ABSPATH' ) || exit;
 
 // phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_fopen,WordPress.WP.AlternativeFunctions.file_system_operations_fwrite,WordPress.WP.AlternativeFunctions.file_system_operations_fread,WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- CSV stream to php://output and reading uploaded tmp files.
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
-// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
 class ShmppEmployeesController {
 
@@ -95,7 +94,8 @@ class ShmppEmployeesController {
 		$emp  = ShmppDatabase::table( 'employees' );
 		$role = ShmppDatabase::table( 'employee_roles' );
 		$rows = $wpdb->get_results(
-			"SELECT e.*, r.name AS role_name FROM {$emp} e LEFT JOIN {$role} r ON r.id = e.role_id WHERE " . ShmppTrash::alive_sql( 'e' ) . ' ORDER BY e.id DESC',
+			$wpdb->prepare( 'SELECT e.*, r.name AS role_name FROM %i e LEFT JOIN %i r ON r.id = e.role_id WHERE e.deleted_at IS NULL AND 1 = %d ORDER BY e.id DESC', $emp, $role, 1
+			),
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -107,7 +107,8 @@ class ShmppEmployeesController {
 		$emp    = ShmppDatabase::table( 'employees' );
 		$role   = ShmppDatabase::table( 'employee_roles' );
 		$employees = $wpdb->get_results(
-			"SELECT e.*, r.name AS role_name FROM {$emp} e LEFT JOIN {$role} r ON r.id = e.role_id WHERE " . ShmppTrash::alive_sql( 'e' ) . ' ORDER BY e.id ASC',
+			$wpdb->prepare( 'SELECT e.*, r.name AS role_name FROM %i e LEFT JOIN %i r ON r.id = e.role_id WHERE e.deleted_at IS NULL AND 1 = %d ORDER BY e.id ASC', $emp, $role, 1
+			),
 			ARRAY_A
 		);
 
@@ -211,8 +212,9 @@ class ShmppEmployeesController {
 
 	public function list_roles() {
 		global $wpdb;
-		$rows = $wpdb->get_results(
-			'SELECT * FROM ' . ShmppDatabase::table( 'employee_roles' ) . ' WHERE ' . ShmppTrash::alive_sql() . ' ORDER BY name ASC',
+		$table = ShmppDatabase::table( 'employee_roles' );
+		$rows  = $wpdb->get_results(
+			$wpdb->prepare( 'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d ORDER BY name ASC', $table, 1 ),
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -237,10 +239,11 @@ class ShmppEmployeesController {
 		$sal = ShmppDatabase::table( 'employee_salaries' );
 		$emp = ShmppDatabase::table( 'employees' );
 		$rows = $wpdb->get_results(
-			"SELECT s.*, e.first_name, e.last_name, e.employee_code
-			FROM {$sal} s LEFT JOIN {$emp} e ON e.id = s.employee_id
-			WHERE " . ShmppTrash::alive_sql( 's' ) . '
-			ORDER BY s.employee_id ASC, s.salary_month DESC',
+			$wpdb->prepare( 'SELECT s.*, e.first_name, e.last_name, e.employee_code
+				FROM %i s LEFT JOIN %i e ON e.id = s.employee_id
+				WHERE s.deleted_at IS NULL AND 1 = %d
+				ORDER BY s.employee_id ASC, s.salary_month DESC', $sal, $emp, 1
+			),
 			ARRAY_A
 		);
 
@@ -287,9 +290,7 @@ class ShmppEmployeesController {
 		$table    = ShmppDatabase::table( 'employee_salaries' );
 		$existing = $employee_id && $salary_month
 			? $wpdb->get_var(
-				$wpdb->prepare(
-					"SELECT id FROM {$table} WHERE employee_id = %d AND salary_month = %s",
-					$employee_id,
+				$wpdb->prepare( 'SELECT id FROM %i WHERE employee_id = %d AND salary_month = %s', $table, $employee_id,
 					$salary_month
 				)
 			)

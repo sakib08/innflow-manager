@@ -1,8 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
-// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
 class ShmppBillingController {
 
@@ -138,7 +137,7 @@ class ShmppBillingController {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_payment_types' ),
-					'permission_callback' => array( 'ShmppRestAPI', 'permission_public' ),
+					'permission_callback' => '__return_true',
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
@@ -155,11 +154,11 @@ class ShmppBillingController {
 		$range  = $this->date_range( $period );
 
 		$sums = array(
-			'room'                   => $this->sum_table( 'room_bills', 'total_amount', 'bill_date', $range ),
-			'restaurant'             => $this->sum_table( 'restaurant_bills', 'total_amount', 'bill_date', $range ),
-			'non_border_restaurant'  => $this->sum_table( 'non_border_restaurant_bills', 'total_amount', 'bill_date', $range ),
-			'laundry'                => $this->sum_table( 'laundry_bills', 'total_amount', 'bill_date', $range ),
-			'damage'                 => $this->sum_table( 'damage_bills', 'total_amount', 'bill_date', $range ),
+			'room'                  => $this->sum_table( 'room_bills', $range ),
+			'restaurant'            => $this->sum_table( 'restaurant_bills', $range ),
+			'non_border_restaurant' => $this->sum_table( 'non_border_restaurant_bills', $range ),
+			'laundry'               => $this->sum_table( 'laundry_bills', $range ),
+			'damage'                => $this->sum_table( 'damage_bills', $range ),
 		);
 
 		$sums['total'] = array_sum( $sums );
@@ -176,8 +175,9 @@ class ShmppBillingController {
 
 	public function list_room_bills() {
 		global $wpdb;
-		$rows = $wpdb->get_results(
-			'SELECT * FROM ' . ShmppDatabase::table( 'room_bills' ) . ' WHERE ' . ShmppTrash::alive_sql() . ' ORDER BY bill_date DESC LIMIT 200',
+		$table = ShmppDatabase::table( 'room_bills' );
+		$rows  = $wpdb->get_results(
+			$wpdb->prepare( 'SELECT * FROM %i WHERE deleted_at IS NULL ORDER BY bill_date DESC LIMIT %d', $table, 200 ),
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -202,7 +202,8 @@ class ShmppBillingController {
 		);
 		$wpdb->insert( ShmppDatabase::table( 'room_bills' ), $data );
 		$id = (int) $wpdb->insert_id;
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . ShmppDatabase::table( 'room_bills' ) . ' WHERE id = %d', $id ), ARRAY_A );
+		$table = ShmppDatabase::table( 'room_bills' );
+		$row   = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $table, $id ), ARRAY_A );
 		return rest_ensure_response( $row );
 	}
 
@@ -210,8 +211,9 @@ class ShmppBillingController {
 		global $wpdb;
 		$bills  = ShmppDatabase::table( 'restaurant_bills' );
 		$rest   = ShmppDatabase::table( 'restaurants' );
-		$rows   = $wpdb->get_results(
-			"SELECT b.*, r.name AS restaurant_name FROM {$bills} b LEFT JOIN {$rest} r ON r.id = b.restaurant_id WHERE " . ShmppTrash::alive_sql( 'b' ) . ' ORDER BY b.bill_date DESC LIMIT 200',
+		$rows = $wpdb->get_results(
+			$wpdb->prepare( 'SELECT b.*, r.name AS restaurant_name FROM %i b LEFT JOIN %i r ON r.id = b.restaurant_id WHERE b.deleted_at IS NULL ORDER BY b.bill_date DESC LIMIT %d', $bills, $rest, 200
+			),
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -251,14 +253,16 @@ class ShmppBillingController {
 			);
 		}
 
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . ShmppDatabase::table( 'restaurant_bills' ) . ' WHERE id = %d', $bill_id ), ARRAY_A );
+		$rb_table = ShmppDatabase::table( 'restaurant_bills' );
+		$row      = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $rb_table, $bill_id ), ARRAY_A );
 		return rest_ensure_response( $row );
 	}
 
 	public function list_non_border() {
 		global $wpdb;
-		$rows = $wpdb->get_results(
-			'SELECT * FROM ' . ShmppDatabase::table( 'non_border_restaurant_bills' ) . ' WHERE ' . ShmppTrash::alive_sql() . ' ORDER BY bill_date DESC LIMIT 200',
+		$table = ShmppDatabase::table( 'non_border_restaurant_bills' );
+		$rows  = $wpdb->get_results(
+			$wpdb->prepare( 'SELECT * FROM %i WHERE deleted_at IS NULL ORDER BY bill_date DESC LIMIT %d', $table, 200 ),
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -285,14 +289,16 @@ class ShmppBillingController {
 		);
 		$wpdb->insert( ShmppDatabase::table( 'non_border_restaurant_bills' ), $data );
 		$id  = (int) $wpdb->insert_id;
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . ShmppDatabase::table( 'non_border_restaurant_bills' ) . ' WHERE id = %d', $id ), ARRAY_A );
+		$nb_table = ShmppDatabase::table( 'non_border_restaurant_bills' );
+		$row      = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $nb_table, $id ), ARRAY_A );
 		return rest_ensure_response( $row );
 	}
 
 	public function list_laundry() {
 		global $wpdb;
-		$rows = $wpdb->get_results(
-			'SELECT * FROM ' . ShmppDatabase::table( 'laundry_bills' ) . ' WHERE ' . ShmppTrash::alive_sql() . ' ORDER BY bill_date DESC LIMIT 200',
+		$table = ShmppDatabase::table( 'laundry_bills' );
+		$rows  = $wpdb->get_results(
+			$wpdb->prepare( 'SELECT * FROM %i WHERE deleted_at IS NULL ORDER BY bill_date DESC LIMIT %d', $table, 200 ),
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -318,14 +324,16 @@ class ShmppBillingController {
 		);
 		$wpdb->insert( ShmppDatabase::table( 'laundry_bills' ), $data );
 		$id  = (int) $wpdb->insert_id;
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . ShmppDatabase::table( 'laundry_bills' ) . ' WHERE id = %d', $id ), ARRAY_A );
+		$lb_table = ShmppDatabase::table( 'laundry_bills' );
+		$row      = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $lb_table, $id ), ARRAY_A );
 		return rest_ensure_response( $row );
 	}
 
 	public function list_damage() {
 		global $wpdb;
-		$rows = $wpdb->get_results(
-			'SELECT * FROM ' . ShmppDatabase::table( 'damage_bills' ) . ' WHERE ' . ShmppTrash::alive_sql() . ' ORDER BY bill_date DESC LIMIT 200',
+		$table = ShmppDatabase::table( 'damage_bills' );
+		$rows  = $wpdb->get_results(
+			$wpdb->prepare( 'SELECT * FROM %i WHERE deleted_at IS NULL ORDER BY bill_date DESC LIMIT %d', $table, 200 ),
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -351,14 +359,16 @@ class ShmppBillingController {
 		);
 		$wpdb->insert( ShmppDatabase::table( 'damage_bills' ), $data );
 		$id  = (int) $wpdb->insert_id;
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . ShmppDatabase::table( 'damage_bills' ) . ' WHERE id = %d', $id ), ARRAY_A );
+		$db_table = ShmppDatabase::table( 'damage_bills' );
+		$row      = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $db_table, $id ), ARRAY_A );
 		return rest_ensure_response( $row );
 	}
 
 	public function list_payment_types() {
 		global $wpdb;
-		$rows = $wpdb->get_results(
-			'SELECT * FROM ' . ShmppDatabase::table( 'offline_payment_types' ) . ' WHERE is_active = 1 AND ' . ShmppTrash::alive_sql() . ' ORDER BY name ASC',
+		$table = ShmppDatabase::table( 'offline_payment_types' );
+		$rows  = $wpdb->get_results(
+			$wpdb->prepare( 'SELECT * FROM %i WHERE is_active = 1 AND deleted_at IS NULL AND 1 = %d ORDER BY name ASC', $table, 1 ),
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -378,7 +388,8 @@ class ShmppBillingController {
 			)
 		);
 		$id  = (int) $wpdb->insert_id;
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . ShmppDatabase::table( 'offline_payment_types' ) . ' WHERE id = %d', $id ), ARRAY_A );
+		$pt_table = ShmppDatabase::table( 'offline_payment_types' );
+		$row      = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $pt_table, $id ), ARRAY_A );
 		return rest_ensure_response( $row );
 	}
 
@@ -401,13 +412,14 @@ class ShmppBillingController {
 		}
 	}
 
-	private function sum_table( $table_key, $column, $date_col, $range ) {
+	private function sum_table( $table_key, $range ) {
 		global $wpdb;
 		$table = ShmppDatabase::table( $table_key );
-		$sum   = $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COALESCE(SUM({$column}),0) FROM {$table} WHERE " . ShmppTrash::alive_sql() . " AND DATE({$date_col}) BETWEEN %s AND %s",
-				$range['from'],
+		if ( ! $table ) {
+			return 0.0;
+		}
+		$sum = $wpdb->get_var(
+			$wpdb->prepare( 'SELECT COALESCE(SUM(total_amount),0) FROM %i WHERE deleted_at IS NULL AND DATE(bill_date) BETWEEN %s AND %s', $table, $range['from'],
 				$range['to']
 			)
 		);

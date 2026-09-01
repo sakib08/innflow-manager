@@ -1,8 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
-// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
 class ShmppGuestsController {
 
@@ -53,17 +52,32 @@ class ShmppGuestsController {
 		global $wpdb;
 		$search = sanitize_text_field( $request->get_param( 'search' ) );
 		$table  = ShmppDatabase::table( 'guests' );
-		$sql    = "SELECT * FROM {$table} WHERE " . ShmppTrash::alive_sql();
-		$params = array();
 		if ( $search ) {
-			$like     = '%' . $wpdb->esc_like( $search ) . '%';
-			$sql     .= ' AND (first_name LIKE %s OR last_name LIKE %s OR email LIKE %s OR phone LIKE %s)';
-			$params   = array( $like, $like, $like, $like );
+			$like = '%' . $wpdb->esc_like( $search ) . '%';
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d AND (first_name LIKE %s OR last_name LIKE %s OR email LIKE %s OR phone LIKE %s) ORDER BY created_at DESC LIMIT %d',
+					$table,
+					1,
+					$like,
+					$like,
+					$like,
+					$like,
+					200
+				),
+				ARRAY_A
+			);
+		} else {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d ORDER BY created_at DESC LIMIT %d',
+					$table,
+					1,
+					200
+				),
+				ARRAY_A
+			);
 		}
-		$sql .= ' ORDER BY created_at DESC LIMIT 200';
-		$rows = $params
-			? $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A )
-			: $wpdb->get_results( $sql, ARRAY_A );
 		return rest_ensure_response( $rows );
 	}
 
@@ -74,8 +88,11 @@ class ShmppGuestsController {
 			$attrs = $request->get_attributes();
 			$id    = isset( $attrs['id'] ) ? (int) $attrs['id'] : 0;
 		}
-		$guest = $wpdb->get_row(
-			$wpdb->prepare( 'SELECT * FROM ' . ShmppDatabase::table( 'guests' ) . ' WHERE id = %d AND ' . ShmppTrash::alive_sql(), $id ),
+		$guests_table   = ShmppDatabase::table( 'guests' );
+		$bookings_table = ShmppDatabase::table( 'bookings' );
+		$checkin_table  = ShmppDatabase::table( 'guest_checkin_checkout' );
+		$guest          = $wpdb->get_row(
+			$wpdb->prepare( 'SELECT * FROM %i WHERE id = %d AND deleted_at IS NULL', $guests_table, $id ),
 			ARRAY_A
 		);
 		if ( ! $guest ) {
@@ -83,11 +100,11 @@ class ShmppGuestsController {
 		}
 
 		$guest['bookings'] = $wpdb->get_results(
-			$wpdb->prepare( 'SELECT * FROM ' . ShmppDatabase::table( 'bookings' ) . ' WHERE guest_id = %d AND ' . ShmppTrash::alive_sql() . ' ORDER BY check_in DESC', $id ),
+			$wpdb->prepare( 'SELECT * FROM %i WHERE guest_id = %d AND deleted_at IS NULL ORDER BY check_in DESC', $bookings_table, $id ),
 			ARRAY_A
 		);
 		$guest['checkins'] = $wpdb->get_results(
-			$wpdb->prepare( 'SELECT * FROM ' . ShmppDatabase::table( 'guest_checkin_checkout' ) . ' WHERE guest_id = %d AND ' . ShmppTrash::alive_sql(), $id ),
+			$wpdb->prepare( 'SELECT * FROM %i WHERE guest_id = %d AND deleted_at IS NULL', $checkin_table, $id ),
 			ARRAY_A
 		);
 

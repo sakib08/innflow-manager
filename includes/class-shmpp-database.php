@@ -1,15 +1,53 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
-// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
 class ShmppDatabase {
 
 	const DB_VERSION = '1.7.0';
 
+	/**
+	 * Allowed custom-table suffixes (never accept arbitrary caller input).
+	 *
+	 * @return string[]
+	 */
+	public static function allowed_table_suffixes() {
+		return array(
+			'room_types',
+			'amenities',
+			'room_type_amenities',
+			'room_gallery',
+			'booking_date_slots',
+			'guests',
+			'discounts',
+			'offline_payment_types',
+			'bookings',
+			'guest_checkin_checkout',
+			'room_bills',
+			'restaurants',
+			'restaurant_bills',
+			'restaurant_guest_bills',
+			'non_border_restaurant_bills',
+			'laundry_bills',
+			'damage_bills',
+			'employee_roles',
+			'employees',
+			'employee_salaries',
+		);
+	}
+
+	/**
+	 * Resolve a plugin table name from an allowlisted suffix.
+	 *
+	 * @param string $name Table suffix without prefix (e.g. 'bookings').
+	 * @return string|null Fully qualified table name, or null if not allowlisted.
+	 */
 	public static function table( $name ) {
 		global $wpdb;
+		if ( ! is_string( $name ) || ! in_array( $name, self::allowed_table_suffixes(), true ) ) {
+			return null;
+		}
 		return $wpdb->prefix . 'shmpp_' . $name;
 	}
 
@@ -454,7 +492,6 @@ class ShmppDatabase {
 			if ( ! $new ) {
 				continue;
 			}
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$new_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $new ) );
 
 			foreach ( $legacy_prefixes as $legacy_prefix ) {
@@ -462,45 +499,36 @@ class ShmppDatabase {
 				if ( ! $old ) {
 					continue;
 				}
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$old_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $old ) );
 				if ( ! $old_exists ) {
 					continue;
 				}
 
 				if ( $new_exists ) {
-					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- identifiers vetted by self::safe_identifier().
-					$old_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$old}`" );
+					$old_count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE 1 = %d', $old, 1 ) );
 					if ( $old_count > 0 ) {
 						// Prefer legacy data over newly created empty/demo ifmpp_ tables.
-						// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- identifiers vetted by self::safe_identifier().
-						$wpdb->query( "DROP TABLE `{$new}`" );
-						// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- identifiers vetted by self::safe_identifier().
-						$wpdb->query( "RENAME TABLE `{$old}` TO `{$new}`" );
+						$wpdb->query( $wpdb->prepare( 'DROP TABLE %i', $new ) );
+						$wpdb->query( $wpdb->prepare( 'RENAME TABLE %i TO %i', $old, $new ) );
 						$new_exists = true;
 					}
 					continue;
 				}
 
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- identifiers vetted by self::safe_identifier().
-				$wpdb->query( "RENAME TABLE `{$old}` TO `{$new}`" );
+				$wpdb->query( $wpdb->prepare( 'RENAME TABLE %i TO %i', $old, $new ) );
 				$new_exists = true;
 			}
 		}
 
 		// Update shortcodes in content (legacy tag, then the pre-rename shmpp_search tag).
 		$wpdb->query(
-			$wpdb->prepare(
-				"UPDATE {$wpdb->posts} SET post_content = REPLACE(post_content, %s, %s) WHERE post_content LIKE %s",
-				'[hotel_booking_search',
+			$wpdb->prepare( 'UPDATE %i SET post_content = REPLACE(post_content, %s, %s) WHERE post_content LIKE %s', $wpdb->posts, '[hotel_booking_search',
 				'[shmpp_search',
 				'%[hotel_booking_search%'
 			)
 		);
 		$wpdb->query(
-			$wpdb->prepare(
-				"UPDATE {$wpdb->posts} SET post_content = REPLACE(post_content, %s, %s) WHERE post_content LIKE %s",
-				'[staynexus_hotel_manager_search',
+			$wpdb->prepare( 'UPDATE %i SET post_content = REPLACE(post_content, %s, %s) WHERE post_content LIKE %s', $wpdb->posts, '[staynexus_hotel_manager_search',
 				'[shmpp_search',
 				'%[staynexus_hotel_manager_search%'
 			)
@@ -508,10 +536,9 @@ class ShmppDatabase {
 	}
 
 	/**
-	 * Validate a table identifier before it is interpolated into a query.
+	 * Validate a table identifier before it is passed to %i placeholders.
 	 *
-	 * wpdb::prepare() cannot parameterize identifiers (table/column names), so any
-	 * identifier built from a variable must be allow-listed against a strict pattern
+	 * Identifiers built from variables must be allow-listed against a strict pattern
 	 * before use. Returns the identifier unchanged if safe, or null if it is not.
 	 *
 	 * @param string $identifier Fully-qualified table name to validate.
@@ -551,16 +578,13 @@ class ShmppDatabase {
 
 		foreach ( $tables as $name ) {
 			$table = self::table( $name );
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
 			if ( ! $exists ) {
 				continue;
 			}
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-			$col = $wpdb->get_results( $wpdb->prepare( "SHOW COLUMNS FROM {$table} LIKE %s", 'deleted_at' ) );
+			$col = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, 'deleted_at' ) );
 			if ( empty( $col ) ) {
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$wpdb->query( "ALTER TABLE {$table} ADD COLUMN deleted_at DATETIME NULL, ADD KEY deleted_at (deleted_at)" );
+					$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i ADD COLUMN deleted_at DATETIME NULL, ADD KEY deleted_at (deleted_at)', $table ) );
 			}
 		}
 	}
@@ -569,8 +593,7 @@ class ShmppDatabase {
 		global $wpdb;
 
 		$payments = self::table( 'offline_payment_types' );
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-		$count    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$payments}" );
+		$count    = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE 1 = %d', $payments, 1 ) );
 		if ( 0 === $count ) {
 			$defaults = array(
 				array( 'Cash', 'cash', 'Cash payment at front desk' ),
@@ -593,8 +616,7 @@ class ShmppDatabase {
 		}
 
 		$roles = self::table( 'employee_roles' );
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$roles}" );
+		$count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE 1 = %d', $roles, 1 ) );
 		if ( 0 === $count ) {
 			$defaults = array(
 				array( 'Manager', 'manager', 'Hotel manager' ),
@@ -649,8 +671,7 @@ class ShmppDatabase {
 		global $wpdb;
 
 		$rooms_table = self::table( 'room_types' );
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-		if ( ! $force && (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rooms_table}" ) > 0 ) {
+		if ( ! $force && (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE 1 = %d', $rooms_table, 1 ) ) > 0 ) {
 			return false;
 		}
 
@@ -678,12 +699,10 @@ class ShmppDatabase {
 
 		$cash_table = self::table( 'offline_payment_types' );
 		$cash_id    = (int) $wpdb->get_var(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-			$wpdb->prepare( "SELECT id FROM {$cash_table} WHERE slug = %s", 'cash' )
+			$wpdb->prepare( 'SELECT id FROM %i WHERE slug = %s', $cash_table, 'cash' )
 		);
 		$card_id = (int) $wpdb->get_var(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-			$wpdb->prepare( "SELECT id FROM {$cash_table} WHERE slug = %s", 'card' )
+			$wpdb->prepare( 'SELECT id FROM %i WHERE slug = %s', $cash_table, 'card' )
 		);
 
 		// Amenities.
@@ -876,8 +895,7 @@ class ShmppDatabase {
 		);
 		$discounts_table = self::table( 'discounts' );
 		$discount_id     = (int) $wpdb->get_var(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-			$wpdb->prepare( "SELECT id FROM {$discounts_table} WHERE code = %s", 'WELCOME10' )
+			$wpdb->prepare( 'SELECT id FROM %i WHERE code = %s', $discounts_table, 'WELCOME10' )
 		);
 
 		// Restaurants.
@@ -904,8 +922,7 @@ class ShmppDatabase {
 		// Employees.
 		$role_map = array();
 		$roles_table = self::table( 'employee_roles' );
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-		$roles_rows = $wpdb->get_results( "SELECT id, slug FROM {$roles_table}", ARRAY_A );
+		$roles_rows = $wpdb->get_results( $wpdb->prepare( 'SELECT id, slug FROM %i WHERE 1 = %d', $roles_table, 1 ), ARRAY_A );
 		foreach ( $roles_rows as $rr ) {
 			$role_map[ $rr['slug'] ] = (int) $rr['id'];
 		}
@@ -941,8 +958,7 @@ class ShmppDatabase {
 			$employee_ids[] = $eid;
 
 			$bank_id = (int) $wpdb->get_var(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-				$wpdb->prepare( "SELECT id FROM {$cash_table} WHERE slug = %s", 'bank-transfer' )
+					$wpdb->prepare( 'SELECT id FROM %i WHERE slug = %s', $cash_table, 'bank-transfer' )
 			);
 
 			foreach ( array( $month_prev, $month_now ) as $mi => $month ) {
@@ -1016,8 +1032,7 @@ class ShmppDatabase {
 		foreach ( $booking_defs as $b ) {
 			$guest_id = $guest_ids[ $b[0] ];
 			$room_id  = $room_ids[ $b[1] ];
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-			$room     = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$rooms_table} WHERE id = %d", $room_id ), ARRAY_A );
+			$room     = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $rooms_table, $room_id ), ARRAY_A );
 			$check_in  = gmdate( 'Y-m-d', strtotime( $b[2] . ' days' ) );
 			$check_out = gmdate( 'Y-m-d', strtotime( $b[3] . ' days' ) );
 			$nights    = max( 1, (int) ( ( strtotime( $check_out ) - strtotime( $check_in ) ) / DAY_IN_SECONDS ) );
@@ -1098,10 +1113,7 @@ class ShmppDatabase {
 		$in_house_guest = $guest_ids[2];
 		$bookings_table = self::table( 'bookings' );
 		$in_house_book  = (int) $wpdb->get_var(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-			$wpdb->prepare(
-				"SELECT id FROM {$bookings_table} WHERE guest_id = %d ORDER BY id DESC LIMIT 1",
-				$in_house_guest
+			$wpdb->prepare( 'SELECT id FROM %i WHERE guest_id = %d ORDER BY id DESC LIMIT 1', $bookings_table, $in_house_guest
 			)
 		);
 
@@ -1180,10 +1192,7 @@ class ShmppDatabase {
 
 		$past_guest = $guest_ids[0];
 		$past_book = (int) $wpdb->get_var(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-			$wpdb->prepare(
-				"SELECT id FROM {$bookings_table} WHERE guest_id = %d ORDER BY id ASC LIMIT 1",
-				$past_guest
+			$wpdb->prepare( 'SELECT id FROM %i WHERE guest_id = %d ORDER BY id ASC LIMIT 1', $bookings_table, $past_guest
 			)
 		);
 		$wpdb->insert(

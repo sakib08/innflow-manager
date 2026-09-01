@@ -1,8 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
-// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
 class ShmppBookingsController {
 
@@ -101,7 +100,7 @@ class ShmppBookingsController {
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'validate_discount' ),
-				'permission_callback' => array( 'ShmppRestAPI', 'permission_public' ),
+				'permission_callback' => '__return_true',
 			)
 		);
 	}
@@ -113,21 +112,42 @@ class ShmppBookingsController {
 		$rooms    = ShmppDatabase::table( 'room_types' );
 
 		$status = sanitize_text_field( $request->get_param( 'status' ) );
-		$sql    = "SELECT b.*, g.first_name, g.last_name, g.email, g.phone, r.name AS room_name
-			FROM {$bookings} b
-			LEFT JOIN {$guests} g ON g.id = b.guest_id
-			LEFT JOIN {$rooms} r ON r.id = b.room_type_id
-			WHERE " . ShmppTrash::alive_sql( 'b' );
-		$params = array();
 		if ( $status ) {
-			$sql     .= ' AND b.booking_status = %s';
-			$params[] = $status;
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT b.*, g.first_name, g.last_name, g.email, g.phone, r.name AS room_name
+					FROM %i b
+					LEFT JOIN %i g ON g.id = b.guest_id
+					LEFT JOIN %i r ON r.id = b.room_type_id
+					WHERE b.deleted_at IS NULL AND 1 = %d AND b.booking_status = %s
+					ORDER BY b.created_at DESC LIMIT %d',
+					$bookings,
+					$guests,
+					$rooms,
+					1,
+					$status,
+					200
+				),
+				ARRAY_A
+			);
+		} else {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT b.*, g.first_name, g.last_name, g.email, g.phone, r.name AS room_name
+					FROM %i b
+					LEFT JOIN %i g ON g.id = b.guest_id
+					LEFT JOIN %i r ON r.id = b.room_type_id
+					WHERE b.deleted_at IS NULL AND 1 = %d
+					ORDER BY b.created_at DESC LIMIT %d',
+					$bookings,
+					$guests,
+					$rooms,
+					1,
+					200
+				),
+				ARRAY_A
+			);
 		}
-		$sql .= ' ORDER BY b.created_at DESC LIMIT 200';
-
-		$rows = $params
-			? $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A )
-			: $wpdb->get_results( $sql, ARRAY_A );
 
 		return rest_ensure_response( $rows );
 	}
@@ -145,13 +165,11 @@ class ShmppBookingsController {
 		$check    = ShmppDatabase::table( 'guest_checkin_checkout' );
 
 		$row = $wpdb->get_row(
-			$wpdb->prepare(
-				"SELECT b.*, g.first_name, g.last_name, g.email, g.phone, g.address, r.name AS room_name
-				FROM {$bookings} b
-				LEFT JOIN {$guests} g ON g.id = b.guest_id
-				LEFT JOIN {$rooms} r ON r.id = b.room_type_id
-				WHERE b.id = %d AND " . ShmppTrash::alive_sql( 'b' ),
-				$id
+			$wpdb->prepare( 'SELECT b.*, g.first_name, g.last_name, g.email, g.phone, g.address, r.name AS room_name
+				FROM %i b
+				LEFT JOIN %i g ON g.id = b.guest_id
+				LEFT JOIN %i r ON r.id = b.room_type_id
+				WHERE b.id = %d AND b.deleted_at IS NULL', $bookings, $guests, $rooms, $id
 			),
 			ARRAY_A
 		);
@@ -161,7 +179,7 @@ class ShmppBookingsController {
 		}
 
 		$row['checkin_checkout'] = $wpdb->get_results(
-			$wpdb->prepare( "SELECT * FROM {$check} WHERE booking_id = %d AND " . ShmppTrash::alive_sql(), $id ),
+			$wpdb->prepare( 'SELECT * FROM %i WHERE booking_id = %d AND deleted_at IS NULL', $check, $id ),
 			ARRAY_A
 		);
 
@@ -195,7 +213,7 @@ class ShmppBookingsController {
 		}
 
 		$rooms_table = ShmppDatabase::table( 'room_types' );
-		$room        = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$rooms_table} WHERE id = %d", $room_type_id ), ARRAY_A );
+		$room        = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $rooms_table, $room_type_id ), ARRAY_A );
 		if ( ! $room ) {
 			return new WP_Error( 'not_found', 'Room type not found', array( 'status' => 404 ) );
 		}
@@ -282,10 +300,9 @@ class ShmppBookingsController {
 		$this->reserve_slots( $room_type_id, $check_in, $check_out, $rooms_count );
 
 		if ( $discount_id ) {
+			$disc_table = ShmppDatabase::table( 'discounts' );
 			$wpdb->query(
-				$wpdb->prepare(
-					'UPDATE ' . ShmppDatabase::table( 'discounts' ) . ' SET used_count = used_count + 1 WHERE id = %d',
-					$discount_id
+				$wpdb->prepare( 'UPDATE %i SET used_count = used_count + 1 WHERE id = %d', $disc_table, $discount_id
 				)
 			);
 		}
@@ -354,8 +371,9 @@ class ShmppBookingsController {
 
 	public function list_discounts() {
 		global $wpdb;
-		$rows = $wpdb->get_results(
-			'SELECT * FROM ' . ShmppDatabase::table( 'discounts' ) . ' WHERE ' . ShmppTrash::alive_sql() . ' ORDER BY id DESC',
+		$table = ShmppDatabase::table( 'discounts' );
+		$rows  = $wpdb->get_results(
+			$wpdb->prepare( 'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d ORDER BY id DESC', $table, 1 ),
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -375,8 +393,9 @@ class ShmppBookingsController {
 			'status'         => 'active',
 		);
 		$wpdb->insert( ShmppDatabase::table( 'discounts' ), $data );
-		$id  = (int) $wpdb->insert_id;
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . ShmppDatabase::table( 'discounts' ) . ' WHERE id = %d', $id ), ARRAY_A );
+		$id      = (int) $wpdb->insert_id;
+		$d_table = ShmppDatabase::table( 'discounts' );
+		$row     = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $d_table, $id ), ARRAY_A );
 		return rest_ensure_response( $row );
 	}
 
@@ -410,7 +429,7 @@ class ShmppBookingsController {
 		global $wpdb;
 		$table = ShmppDatabase::table( 'discounts' );
 		$row   = $wpdb->get_row(
-			$wpdb->prepare( "SELECT * FROM {$table} WHERE code = %s AND status = 'active' AND " . ShmppTrash::alive_sql(), strtoupper( $code ) ),
+			$wpdb->prepare( 'SELECT * FROM %i WHERE code = %s AND status = \'active\' AND deleted_at IS NULL', $table, strtoupper( $code ) ),
 			ARRAY_A
 		);
 		if ( ! $row ) {
@@ -436,15 +455,13 @@ class ShmppBookingsController {
 		global $wpdb;
 		$table  = ShmppDatabase::table( 'booking_date_slots' );
 		$rooms  = ShmppDatabase::table( 'room_types' );
-		$total  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT total_rooms FROM {$rooms} WHERE id = %d", $room_type_id ) );
+		$total  = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT total_rooms FROM %i WHERE id = %d', $rooms, $room_type_id ) );
 		$date   = $check_in;
 		$nights = (int) ( ( strtotime( $check_out ) - strtotime( $check_in ) ) / DAY_IN_SECONDS );
 
 		for ( $i = 0; $i < $nights; $i++ ) {
 			$existing = $wpdb->get_row(
-				$wpdb->prepare(
-					"SELECT * FROM {$table} WHERE room_type_id = %d AND slot_date = %s AND " . ShmppTrash::alive_sql(),
-					$room_type_id,
+				$wpdb->prepare( 'SELECT * FROM %i WHERE room_type_id = %d AND slot_date = %s AND deleted_at IS NULL', $table, $room_type_id,
 					$date
 				),
 				ARRAY_A

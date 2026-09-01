@@ -25,8 +25,4 @@ class ShmppRestAPI {
 	public static function permission_manage() {
 		return current_user_can( 'manage_options' );
 	}
-
-	public static function permission_public() {
-		return __return_true();
-	}
 }

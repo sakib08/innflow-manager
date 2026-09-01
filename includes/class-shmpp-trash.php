@@ -1,8 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
-// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
 /**
  * Soft-delete / trash helpers for all primary StayNexus Hotel Manager entities.
@@ -157,7 +156,7 @@ class ShmppTrash {
 
 		$table = ShmppDatabase::table( $meta['table'] );
 		$id    = (int) $id;
-		$row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A );
+		$row   = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $table, $id ), ARRAY_A );
 		if ( ! $row ) {
 			return new WP_Error( 'not_found', 'Record not found', array( 'status' => 404 ) );
 		}
@@ -183,9 +182,7 @@ class ShmppTrash {
 		if ( 'bookings' === $type ) {
 			$check = ShmppDatabase::table( 'guest_checkin_checkout' );
 			$wpdb->query(
-				$wpdb->prepare(
-					"UPDATE {$check} SET deleted_at = %s WHERE booking_id = %d AND deleted_at IS NULL",
-					$data['deleted_at'],
+				$wpdb->prepare( 'UPDATE %i SET deleted_at = %s WHERE booking_id = %d AND deleted_at IS NULL', $check, $data['deleted_at'],
 					$id
 				)
 			);
@@ -194,9 +191,7 @@ class ShmppTrash {
 		if ( 'employees' === $type ) {
 			$sal = ShmppDatabase::table( 'employee_salaries' );
 			$wpdb->query(
-				$wpdb->prepare(
-					"UPDATE {$sal} SET deleted_at = %s WHERE employee_id = %d AND deleted_at IS NULL",
-					$data['deleted_at'],
+				$wpdb->prepare( 'UPDATE %i SET deleted_at = %s WHERE employee_id = %d AND deleted_at IS NULL', $sal, $data['deleted_at'],
 					$id
 				)
 			);
@@ -205,9 +200,7 @@ class ShmppTrash {
 		if ( 'rooms' === $type ) {
 			$slots = ShmppDatabase::table( 'booking_date_slots' );
 			$wpdb->query(
-				$wpdb->prepare(
-					"UPDATE {$slots} SET deleted_at = %s WHERE room_type_id = %d AND deleted_at IS NULL",
-					$data['deleted_at'],
+				$wpdb->prepare( 'UPDATE %i SET deleted_at = %s WHERE room_type_id = %d AND deleted_at IS NULL', $slots, $data['deleted_at'],
 					$id
 				)
 			);
@@ -233,8 +226,12 @@ class ShmppTrash {
 		}
 
 		$table = ShmppDatabase::table( $meta['table'] );
-		$id    = (int) $id;
-		$row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A );
+		if ( ! $table ) {
+			return new WP_Error( 'invalid_type', 'Unknown trash type', array( 'status' => 400 ) );
+		}
+
+		$id  = (int) $id;
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $table, $id ), ARRAY_A );
 		if ( ! $row ) {
 			return new WP_Error( 'not_found', 'Record not found', array( 'status' => 404 ) );
 		}
@@ -242,49 +239,33 @@ class ShmppTrash {
 			return true;
 		}
 
-		$data = array( 'deleted_at' => null );
+		$unique_field = null;
+		$unique_value = null;
+		$allowed      = array( 'slug', 'code', 'booking_code', 'bill_number', 'employee_code' );
 
 		if ( ! empty( $meta['unique_fields'] ) ) {
 			foreach ( $meta['unique_fields'] as $field ) {
-				if ( isset( $row[ $field ] ) ) {
-					$restored = self::restore_unique_value( (string) $row[ $field ], $id );
-					// Avoid unique collisions with an active record.
-					$clash = $wpdb->get_var(
-						$wpdb->prepare(
-							"SELECT id FROM {$table} WHERE {$field} = %s AND id != %d AND deleted_at IS NULL LIMIT 1",
-							$restored,
-							$id
-						)
-					);
-					if ( $clash ) {
-						$restored = $restored . '-restored-' . $id;
-					}
-					$data[ $field ] = $restored;
+				if ( ! in_array( $field, $allowed, true ) || ! isset( $row[ $field ] ) ) {
+					continue;
 				}
+				$restored = self::restore_unique_value( (string) $row[ $field ], $id );
+				$clash    = self::unique_clash_id( $table, $field, $restored, $id );
+				if ( $clash ) {
+					$restored = $restored . '-restored-' . $id;
+				}
+				$unique_field = $field;
+				$unique_value = $restored;
+				break;
 			}
 		}
 
-		// wpdb->update skips nulls unless format forces — use query for deleted_at NULL.
-		$set_parts = array( 'deleted_at = NULL' );
-		$params    = array();
-		foreach ( $data as $key => $value ) {
-			if ( 'deleted_at' === $key ) {
-				continue;
-			}
-			$set_parts[] = "{$key} = %s";
-			$params[]    = $value;
-		}
-		$params[] = $id;
-		$sql      = 'UPDATE ' . $table . ' SET ' . implode( ', ', $set_parts ) . ' WHERE id = %d';
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql placeholders match $params; table/columns are allowlisted.
-		$wpdb->query( $wpdb->prepare( $sql, $params ) );
+		// wpdb->update skips nulls — clear deleted_at with an explicit prepared query.
+		self::restore_row( $table, $id, $unique_field, $unique_value );
 
 		if ( 'bookings' === $type ) {
 			$check = ShmppDatabase::table( 'guest_checkin_checkout' );
 			$wpdb->query(
-				$wpdb->prepare(
-					"UPDATE {$check} SET deleted_at = NULL WHERE booking_id = %d AND deleted_at IS NOT NULL",
-					$id
+				$wpdb->prepare( 'UPDATE %i SET deleted_at = NULL WHERE booking_id = %d AND deleted_at IS NOT NULL', $check, $id
 				)
 			);
 		}
@@ -292,9 +273,7 @@ class ShmppTrash {
 		if ( 'employees' === $type ) {
 			$sal = ShmppDatabase::table( 'employee_salaries' );
 			$wpdb->query(
-				$wpdb->prepare(
-					"UPDATE {$sal} SET deleted_at = NULL WHERE employee_id = %d AND deleted_at IS NOT NULL",
-					$id
+				$wpdb->prepare( 'UPDATE %i SET deleted_at = NULL WHERE employee_id = %d AND deleted_at IS NOT NULL', $sal, $id
 				)
 			);
 		}
@@ -302,14 +281,113 @@ class ShmppTrash {
 		if ( 'rooms' === $type ) {
 			$slots = ShmppDatabase::table( 'booking_date_slots' );
 			$wpdb->query(
-				$wpdb->prepare(
-					"UPDATE {$slots} SET deleted_at = NULL WHERE room_type_id = %d AND deleted_at IS NOT NULL",
-					$id
+				$wpdb->prepare( 'UPDATE %i SET deleted_at = NULL WHERE room_type_id = %d AND deleted_at IS NOT NULL', $slots, $id
 				)
 			);
 		}
 
 		return true;
+	}
+
+	/**
+	 * Find an active row that would collide on a unique column.
+	 *
+	 * @param string $table Allowlisted table name.
+	 * @param string $field Allowlisted column name.
+	 * @param string $value Candidate unique value.
+	 * @param int    $id    Current row id.
+	 * @return int|null
+	 */
+	private static function unique_clash_id( $table, $field, $value, $id ) {
+		global $wpdb;
+		switch ( $field ) {
+			case 'slug':
+				return $wpdb->get_var(
+					$wpdb->prepare( 'SELECT id FROM %i WHERE slug = %s AND id != %d AND deleted_at IS NULL LIMIT 1', $table, $value,
+						$id
+					)
+				);
+			case 'code':
+				return $wpdb->get_var(
+					$wpdb->prepare( 'SELECT id FROM %i WHERE code = %s AND id != %d AND deleted_at IS NULL LIMIT 1', $table, $value,
+						$id
+					)
+				);
+			case 'booking_code':
+				return $wpdb->get_var(
+					$wpdb->prepare( 'SELECT id FROM %i WHERE booking_code = %s AND id != %d AND deleted_at IS NULL LIMIT 1', $table, $value,
+						$id
+					)
+				);
+			case 'bill_number':
+				return $wpdb->get_var(
+					$wpdb->prepare( 'SELECT id FROM %i WHERE bill_number = %s AND id != %d AND deleted_at IS NULL LIMIT 1', $table, $value,
+						$id
+					)
+				);
+			case 'employee_code':
+				return $wpdb->get_var(
+					$wpdb->prepare( 'SELECT id FROM %i WHERE employee_code = %s AND id != %d AND deleted_at IS NULL LIMIT 1', $table, $value,
+						$id
+					)
+				);
+			default:
+				return null;
+		}
+	}
+
+	/**
+	 * Clear deleted_at (and optionally restore one unique column).
+	 *
+	 * @param string      $table Allowlisted table name.
+	 * @param int         $id    Row id.
+	 * @param string|null $field Allowlisted unique column or null.
+	 * @param string|null $value Unique value when $field is set.
+	 */
+	private static function restore_row( $table, $id, $field, $value ) {
+		global $wpdb;
+		switch ( $field ) {
+			case 'slug':
+				$wpdb->query(
+					$wpdb->prepare( 'UPDATE %i SET deleted_at = NULL, slug = %s WHERE id = %d', $table, $value,
+						$id
+					)
+				);
+				return;
+			case 'code':
+				$wpdb->query(
+					$wpdb->prepare( 'UPDATE %i SET deleted_at = NULL, code = %s WHERE id = %d', $table, $value,
+						$id
+					)
+				);
+				return;
+			case 'booking_code':
+				$wpdb->query(
+					$wpdb->prepare( 'UPDATE %i SET deleted_at = NULL, booking_code = %s WHERE id = %d', $table, $value,
+						$id
+					)
+				);
+				return;
+			case 'bill_number':
+				$wpdb->query(
+					$wpdb->prepare( 'UPDATE %i SET deleted_at = NULL, bill_number = %s WHERE id = %d', $table, $value,
+						$id
+					)
+				);
+				return;
+			case 'employee_code':
+				$wpdb->query(
+					$wpdb->prepare( 'UPDATE %i SET deleted_at = NULL, employee_code = %s WHERE id = %d', $table, $value,
+						$id
+					)
+				);
+				return;
+			default:
+				$wpdb->query(
+					$wpdb->prepare( 'UPDATE %i SET deleted_at = NULL WHERE id = %d', $table, $id
+					)
+				);
+		}
 	}
 
 	/**
@@ -326,7 +404,7 @@ class ShmppTrash {
 
 		$table = ShmppDatabase::table( $meta['table'] );
 		$id    = (int) $id;
-		$row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A );
+		$row   = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $table, $id ), ARRAY_A );
 		if ( ! $row ) {
 			return new WP_Error( 'not_found', 'Record not found', array( 'status' => 404 ) );
 		}
@@ -377,7 +455,12 @@ class ShmppTrash {
 			}
 			global $wpdb;
 			$table = ShmppDatabase::table( $meta['table'] );
-			$ids   = $wpdb->get_col( "SELECT id FROM {$table} WHERE deleted_at IS NOT NULL" );
+			if ( ! $table ) {
+				continue;
+			}
+			$ids = $wpdb->get_col(
+				$wpdb->prepare( 'SELECT id FROM %i WHERE deleted_at IS NOT NULL AND 1 = %d', $table, 1 )
+			);
 			foreach ( $ids as $id ) {
 				$result = self::force_delete( $t, (int) $id );
 				if ( ! is_wp_error( $result ) ) {
@@ -406,8 +489,12 @@ class ShmppTrash {
 				continue;
 			}
 			$table = ShmppDatabase::table( $meta['table'] );
-			$rows  = $wpdb->get_results(
-				"SELECT * FROM {$table} WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT 200",
+			if ( ! $table ) {
+				continue;
+			}
+			$rows = $wpdb->get_results(
+				$wpdb->prepare( 'SELECT * FROM %i WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT %d', $table, 200
+				),
 				ARRAY_A
 			);
 			foreach ( $rows as $row ) {
@@ -439,7 +526,12 @@ class ShmppTrash {
 		$total  = 0;
 		foreach ( self::entities() as $type => $meta ) {
 			$table = ShmppDatabase::table( $meta['table'] );
-			$n     = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE deleted_at IS NOT NULL" );
+			if ( ! $table ) {
+				continue;
+			}
+			$n = (int) $wpdb->get_var(
+				$wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE deleted_at IS NOT NULL AND 1 = %d', $table, 1 )
+			);
 			$counts[ $type ] = array(
 				'label' => $meta['label'],
 				'count' => $n,

@@ -1,8 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted ShmppDatabase::table() keys.
-// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
 class ShmppDashboardController {
 
@@ -44,48 +43,39 @@ class ShmppDashboardController {
 		$check    = ShmppDatabase::table( 'guest_checkin_checkout' );
 
 		$arrivals = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$bookings} WHERE deleted_at IS NULL AND check_in BETWEEN %s AND %s AND booking_status != 'cancelled'",
-				$range['from'],
+			$wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE deleted_at IS NULL AND check_in BETWEEN %s AND %s AND booking_status != \'cancelled\'', $bookings, $range['from'],
 				$range['to']
 			)
 		);
 
 		$departures = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$bookings} WHERE deleted_at IS NULL AND check_out BETWEEN %s AND %s AND booking_status != 'cancelled'",
-				$range['from'],
+			$wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE deleted_at IS NULL AND check_out BETWEEN %s AND %s AND booking_status != \'cancelled\'', $bookings, $range['from'],
 				$range['to']
 			)
 		);
 
 		$in_house = (int) $wpdb->get_var(
-			"SELECT COUNT(*) FROM {$check} WHERE deleted_at IS NULL AND status = 'checked_in'"
+			$wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE deleted_at IS NULL AND status = %s', $check, 'checked_in'
+			)
 		);
 
 		$expected = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$check} WHERE deleted_at IS NULL AND status = 'expected' AND booking_id IN (
-					SELECT id FROM {$bookings} WHERE deleted_at IS NULL AND check_in BETWEEN %s AND %s
-				)",
-				$range['from'],
+			$wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE deleted_at IS NULL AND status = \'expected\' AND booking_id IN (
+					SELECT id FROM %i WHERE deleted_at IS NULL AND check_in BETWEEN %s AND %s
+				)', $check, $bookings, $range['from'],
 				$range['to']
 			)
 		);
 
 		$total_guests = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COALESCE(SUM(adults + children),0) FROM {$bookings}
-				WHERE deleted_at IS NULL AND check_in <= %s AND check_out > %s AND booking_status IN ('confirmed','checked_in')",
-				$range['to'],
+			$wpdb->prepare( 'SELECT COALESCE(SUM(adults + children),0) FROM %i
+				WHERE deleted_at IS NULL AND check_in <= %s AND check_out > %s AND booking_status IN (\'confirmed\',\'checked_in\')', $bookings, $range['to'],
 				$range['from']
 			)
 		);
 
 		$new_bookings = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$bookings} WHERE deleted_at IS NULL AND DATE(created_at) BETWEEN %s AND %s",
-				$range['from'],
+			$wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE deleted_at IS NULL AND DATE(created_at) BETWEEN %s AND %s', $bookings, $range['from'],
 				$range['to']
 			)
 		);
@@ -102,22 +92,23 @@ class ShmppDashboardController {
 
 	private function billing_overview( $range ) {
 		return array(
-			'rooms'                  => $this->sum_bills( 'room_bills', 'bill_date', $range ),
-			'restaurants'            => $this->sum_bills( 'restaurant_bills', 'bill_date', $range ),
-			'non_border_restaurants' => $this->sum_bills( 'non_border_restaurant_bills', 'bill_date', $range ),
-			'laundry'                => $this->sum_bills( 'laundry_bills', 'bill_date', $range ),
-			'damage'                 => $this->sum_bills( 'damage_bills', 'bill_date', $range ),
+			'rooms'                  => $this->sum_bills( 'room_bills', $range ),
+			'restaurants'            => $this->sum_bills( 'restaurant_bills', $range ),
+			'non_border_restaurants' => $this->sum_bills( 'non_border_restaurant_bills', $range ),
+			'laundry'                => $this->sum_bills( 'laundry_bills', $range ),
+			'damage'                 => $this->sum_bills( 'damage_bills', $range ),
 			'total'                  => 0,
 		);
 	}
 
-	private function sum_bills( $table_key, $date_col, $range ) {
+	private function sum_bills( $table_key, $range ) {
 		global $wpdb;
 		$table = ShmppDatabase::table( $table_key );
-		$sum   = (float) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COALESCE(SUM(total_amount),0) FROM {$table} WHERE deleted_at IS NULL AND DATE({$date_col}) BETWEEN %s AND %s",
-				$range['from'],
+		if ( ! $table ) {
+			return 0.0;
+		}
+		$sum = (float) $wpdb->get_var(
+			$wpdb->prepare( 'SELECT COALESCE(SUM(total_amount),0) FROM %i WHERE deleted_at IS NULL AND DATE(bill_date) BETWEEN %s AND %s', $table, $range['from'],
 				$range['to']
 			)
 		);
@@ -130,13 +121,14 @@ class ShmppDashboardController {
 		$guests   = ShmppDatabase::table( 'guests' );
 		$rooms    = ShmppDatabase::table( 'room_types' );
 		return $wpdb->get_results(
-			"SELECT b.id, b.booking_code, b.check_in, b.check_out, b.total_amount, b.booking_status, b.payment_status,
-				g.first_name, g.last_name, r.name AS room_name
-			FROM {$bookings} b
-			LEFT JOIN {$guests} g ON g.id = b.guest_id
-			LEFT JOIN {$rooms} r ON r.id = b.room_type_id
-			WHERE b.deleted_at IS NULL
-			ORDER BY b.created_at DESC LIMIT 10",
+			$wpdb->prepare( 'SELECT b.id, b.booking_code, b.check_in, b.check_out, b.total_amount, b.booking_status, b.payment_status,
+					g.first_name, g.last_name, r.name AS room_name
+				FROM %i b
+				LEFT JOIN %i g ON g.id = b.guest_id
+				LEFT JOIN %i r ON r.id = b.room_type_id
+				WHERE b.deleted_at IS NULL
+				ORDER BY b.created_at DESC LIMIT %d', $bookings, $guests, $rooms, 10
+			),
 			ARRAY_A
 		);
 	}
@@ -145,15 +137,16 @@ class ShmppDashboardController {
 		global $wpdb;
 		$rooms_table = ShmppDatabase::table( 'room_types' );
 		$slots       = ShmppDatabase::table( 'booking_date_slots' );
-		$total_rooms = (int) $wpdb->get_var( "SELECT COALESCE(SUM(total_rooms),0) FROM {$rooms_table} WHERE status = 'active' AND deleted_at IS NULL" );
+		$total_rooms = (int) $wpdb->get_var(
+			$wpdb->prepare( 'SELECT COALESCE(SUM(total_rooms),0) FROM %i WHERE status = %s AND deleted_at IS NULL', $rooms_table, 'active'
+			)
+		);
 
 		$days = max( 1, (int) ( ( strtotime( $range['to'] ) - strtotime( $range['from'] ) ) / DAY_IN_SECONDS ) + 1 );
 		$capacity = $total_rooms * $days;
 
 		$booked = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COALESCE(SUM(booked_rooms),0) FROM {$slots} WHERE deleted_at IS NULL AND slot_date BETWEEN %s AND %s",
-				$range['from'],
+			$wpdb->prepare( 'SELECT COALESCE(SUM(booked_rooms),0) FROM %i WHERE deleted_at IS NULL AND slot_date BETWEEN %s AND %s', $slots, $range['from'],
 				$range['to']
 			)
 		);
@@ -178,17 +171,15 @@ class ShmppDashboardController {
 		$date   = $range['from'];
 		while ( $date <= $range['to'] ) {
 			$guests = (int) $wpdb->get_var(
-				$wpdb->prepare(
-					"SELECT COUNT(*) FROM {$bookings} WHERE deleted_at IS NULL AND check_in <= %s AND check_out > %s AND booking_status IN ('confirmed','checked_in')",
-					$date,
+				$wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE deleted_at IS NULL AND check_in <= %s AND check_out > %s AND booking_status IN (\'confirmed\',\'checked_in\')', $bookings, $date,
 					$date
 				)
 			);
 			$room_rev = (float) $wpdb->get_var(
-				$wpdb->prepare( "SELECT COALESCE(SUM(total_amount),0) FROM {$room_bills} WHERE bill_date = %s", $date )
+				$wpdb->prepare( 'SELECT COALESCE(SUM(total_amount),0) FROM %i WHERE bill_date = %s', $room_bills, $date )
 			);
 			$rest_rev = (float) $wpdb->get_var(
-				$wpdb->prepare( "SELECT COALESCE(SUM(total_amount),0) FROM {$rest_bills} WHERE DATE(bill_date) = %s", $date )
+				$wpdb->prepare( 'SELECT COALESCE(SUM(total_amount),0) FROM %i WHERE DATE(bill_date) = %s', $rest_bills, $date )
 			);
 			$series[] = array(
 				'date'       => $date,
