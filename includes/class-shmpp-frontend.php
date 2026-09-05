@@ -97,11 +97,25 @@ class ShmppFrontend {
 
 	private function get_boot_config( $title = '' ) {
 		$settings = get_option( 'shmpp_settings', array() );
+		// Never expose Stripe secrets to the public frontend.
+		$public_settings = $settings;
+		unset( $public_settings['stripe_secret_key'], $public_settings['stripe_webhook_secret'] );
+
+		$manual_title = ! empty( $settings['manual_payment_title'] )
+			? $settings['manual_payment_title']
+			: __( 'Bank transfer / Manual payment', 'staynexus-hotel-manager' );
+
 		return array(
 			'apiUrl'   => esc_url_raw( rest_url( 'staynexushm/v1' ) ),
 			'nonce'    => wp_create_nonce( 'wp_rest' ),
 			'title'    => $title ? $title : __( 'Find Your Stay', 'staynexus-hotel-manager' ),
-			'settings' => $settings,
+			'settings' => $public_settings,
+			'stripe'   => ShmppStripe::get_public_config(),
+			'manualPayment' => array(
+				'enabled'      => ! empty( $settings['manual_payment_enabled'] ),
+				'title'        => $manual_title,
+				'instructions' => isset( $settings['manual_payment_instructions'] ) ? (string) $settings['manual_payment_instructions'] : '',
+			),
 		);
 	}
 
@@ -114,6 +128,7 @@ class ShmppFrontend {
 
 		wp_enqueue_script( 'shmpp-frontend' );
 		wp_enqueue_style( 'shmpp-frontend' );
+		$this->enqueue_frontend_theme_css();
 
 		if ( $this->config_printed ) {
 			return;
@@ -162,13 +177,45 @@ class ShmppFrontend {
 		$this->enqueue_with_config( $atts['title'] );
 
 		$config = $this->get_boot_config( $atts['title'] );
+		$theme_style = $this->frontend_theme_style_attr( $config['settings'] );
 
 		return sprintf(
-			'<div id="shmpp-frontend-root" class="shmpp-frontend-app shmpp-root" data-api-url="%s" data-nonce="%s" data-title="%s" data-settings="%s"></div>',
+			'<div id="shmpp-frontend-root" class="shmpp-frontend-app shmpp-root"%s data-api-url="%s" data-nonce="%s" data-title="%s" data-settings="%s" data-stripe="%s" data-manual-payment="%s"></div>',
+			$theme_style ? ' style="' . esc_attr( $theme_style ) . '"' : '',
 			esc_url( $config['apiUrl'] ),
 			esc_attr( $config['nonce'] ),
 			esc_attr( $config['title'] ),
-			esc_attr( wp_json_encode( $config['settings'] ) )
+			esc_attr( wp_json_encode( $config['settings'] ) ),
+			esc_attr( wp_json_encode( $config['stripe'] ) ),
+			esc_attr( wp_json_encode( $config['manualPayment'] ) )
 		);
+	}
+
+	/**
+	 * Inline CSS variables for a custom frontend primary color.
+	 *
+	 * @param array $settings Public settings.
+	 * @return string Style attribute value (no style="" wrapper), or empty.
+	 */
+	private function frontend_theme_style_attr( $settings ) {
+		$hex = isset( $settings['frontend_primary_color'] ) ? ShmppColors::sanitize_hex( $settings['frontend_primary_color'] ) : '';
+		if ( ! $hex || strtolower( $hex ) === strtolower( ShmppColors::DEFAULT_PRIMARY ) ) {
+			return '';
+		}
+		return ShmppColors::brand_css_variables( $hex );
+	}
+
+	/**
+	 * Also print theme CSS via inline style sheet for specificity / FOUC reduction.
+	 */
+	private function enqueue_frontend_theme_css() {
+		$settings = get_option( 'shmpp_settings', array() );
+		$hex      = isset( $settings['frontend_primary_color'] ) ? ShmppColors::sanitize_hex( $settings['frontend_primary_color'] ) : '';
+		if ( ! $hex || strtolower( $hex ) === strtolower( ShmppColors::DEFAULT_PRIMARY ) ) {
+			return;
+		}
+		$vars = ShmppColors::brand_css_variables( $hex );
+		$css  = '#shmpp-frontend-root{' . $vars . '}';
+		wp_add_inline_style( 'shmpp-frontend', $css );
 	}
 }

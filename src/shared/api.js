@@ -12,6 +12,24 @@ function readRootConfig() {
     }
   }
 
+  let stripe = {};
+  if (el.dataset.stripe) {
+    try {
+      stripe = JSON.parse(el.dataset.stripe);
+    } catch {
+      stripe = {};
+    }
+  }
+
+  let manualPayment = {};
+  if (el.dataset.manualPayment) {
+    try {
+      manualPayment = JSON.parse(el.dataset.manualPayment);
+    } catch {
+      manualPayment = {};
+    }
+  }
+
   if (!el.dataset.apiUrl) return null;
 
   return {
@@ -19,6 +37,8 @@ function readRootConfig() {
     nonce: el.dataset.nonce || '',
     title: el.dataset.title || '',
     settings,
+    stripe,
+    manualPayment,
   };
 }
 
@@ -173,7 +193,10 @@ export function pageFromSlug(slug) {
     'staynexus-hotel-manager-billing': 'billing',
     'staynexus-hotel-manager-staff': 'staff',
     'staynexus-hotel-manager-restaurants': 'restaurants',
+    'staynexus-hotel-manager-channels': 'channels',
+    'staynexus-hotel-manager-channel-help': 'channel-help',
     'staynexus-hotel-manager-trash': 'trash',
+    'staynexus-hotel-manager-payments': 'payments',
     'staynexus-hotel-manager-settings': 'settings',
   };
   return map[slug] || 'dashboard';

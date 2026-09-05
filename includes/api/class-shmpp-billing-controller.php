@@ -189,16 +189,21 @@ class ShmppBillingController {
 		$tax_rate = isset( $settings['tax_rate'] ) ? (float) $settings['tax_rate'] : 0;
 		$amount   = (float) $request->get_param( 'amount' );
 		$tax      = round( $amount * ( $tax_rate / 100 ), 2 );
-		$data     = array(
-			'booking_id'              => (int) $request->get_param( 'booking_id' ),
-			'guest_id'                => (int) $request->get_param( 'guest_id' ),
-			'description'             => sanitize_text_field( $request->get_param( 'description' ) ),
-			'amount'                  => $amount,
-			'tax_amount'              => $tax,
-			'total_amount'            => $amount + $tax,
-			'bill_date'               => sanitize_text_field( $request->get_param( 'bill_date' ) ?: gmdate( 'Y-m-d' ) ),
-			'payment_status'          => sanitize_text_field( $request->get_param( 'payment_status' ) ?: 'unpaid' ),
-			'offline_payment_type_id' => $request->get_param( 'offline_payment_type_id' ) ? (int) $request->get_param( 'offline_payment_type_id' ) : null,
+		$payment  = $this->payment_fields_from_request( $request, 'unpaid' );
+		if ( is_wp_error( $payment ) ) {
+			return $payment;
+		}
+		$data     = array_merge(
+			array(
+				'booking_id'   => (int) $request->get_param( 'booking_id' ),
+				'guest_id'     => (int) $request->get_param( 'guest_id' ),
+				'description'  => sanitize_text_field( $request->get_param( 'description' ) ),
+				'amount'       => $amount,
+				'tax_amount'   => $tax,
+				'total_amount' => $amount + $tax,
+				'bill_date'    => sanitize_text_field( $request->get_param( 'bill_date' ) ?: gmdate( 'Y-m-d' ) ),
+			),
+			$payment
 		);
 		$wpdb->insert( ShmppDatabase::table( 'room_bills' ), $data );
 		$id = (int) $wpdb->insert_id;
@@ -225,16 +230,21 @@ class ShmppBillingController {
 		$tax_rate = isset( $settings['tax_rate'] ) ? (float) $settings['tax_rate'] : 0;
 		$subtotal = (float) $request->get_param( 'subtotal' );
 		$tax      = round( $subtotal * ( $tax_rate / 100 ), 2 );
-		$data     = array(
-			'restaurant_id'           => (int) $request->get_param( 'restaurant_id' ),
-			'bill_number'             => 'RB-' . strtoupper( wp_generate_password( 8, false, false ) ),
-			'bill_date'               => sanitize_text_field( $request->get_param( 'bill_date' ) ?: current_time( 'mysql' ) ),
-			'subtotal'                => $subtotal,
-			'tax_amount'              => $tax,
-			'total_amount'            => $subtotal + $tax,
-			'payment_status'          => sanitize_text_field( $request->get_param( 'payment_status' ) ?: 'unpaid' ),
-			'offline_payment_type_id' => $request->get_param( 'offline_payment_type_id' ) ? (int) $request->get_param( 'offline_payment_type_id' ) : null,
-			'notes'                   => sanitize_textarea_field( $request->get_param( 'notes' ) ),
+		$payment  = $this->payment_fields_from_request( $request, 'unpaid' );
+		if ( is_wp_error( $payment ) ) {
+			return $payment;
+		}
+		$data     = array_merge(
+			array(
+				'restaurant_id' => (int) $request->get_param( 'restaurant_id' ),
+				'bill_number'   => 'RB-' . strtoupper( wp_generate_password( 8, false, false ) ),
+				'bill_date'     => sanitize_text_field( $request->get_param( 'bill_date' ) ?: current_time( 'mysql' ) ),
+				'subtotal'      => $subtotal,
+				'tax_amount'    => $tax,
+				'total_amount'  => $subtotal + $tax,
+				'notes'         => sanitize_textarea_field( $request->get_param( 'notes' ) ),
+			),
+			$payment
 		);
 		$wpdb->insert( ShmppDatabase::table( 'restaurant_bills' ), $data );
 		$bill_id = (int) $wpdb->insert_id;
@@ -274,18 +284,23 @@ class ShmppBillingController {
 		$tax_rate = isset( $settings['tax_rate'] ) ? (float) $settings['tax_rate'] : 0;
 		$subtotal = (float) $request->get_param( 'subtotal' );
 		$tax      = round( $subtotal * ( $tax_rate / 100 ), 2 );
-		$data     = array(
-			'restaurant_id'           => (int) $request->get_param( 'restaurant_id' ),
-			'bill_number'             => 'NB-' . strtoupper( wp_generate_password( 8, false, false ) ),
-			'guest_name'              => sanitize_text_field( $request->get_param( 'guest_name' ) ),
-			'guest_phone'             => sanitize_text_field( $request->get_param( 'guest_phone' ) ),
-			'bill_date'               => sanitize_text_field( $request->get_param( 'bill_date' ) ?: current_time( 'mysql' ) ),
-			'subtotal'                => $subtotal,
-			'tax_amount'              => $tax,
-			'total_amount'            => $subtotal + $tax,
-			'payment_status'          => sanitize_text_field( $request->get_param( 'payment_status' ) ?: 'paid' ),
-			'offline_payment_type_id' => $request->get_param( 'offline_payment_type_id' ) ? (int) $request->get_param( 'offline_payment_type_id' ) : null,
-			'notes'                   => sanitize_textarea_field( $request->get_param( 'notes' ) ),
+		$payment  = $this->payment_fields_from_request( $request, 'paid' );
+		if ( is_wp_error( $payment ) ) {
+			return $payment;
+		}
+		$data     = array_merge(
+			array(
+				'restaurant_id' => (int) $request->get_param( 'restaurant_id' ),
+				'bill_number'   => 'NB-' . strtoupper( wp_generate_password( 8, false, false ) ),
+				'guest_name'    => sanitize_text_field( $request->get_param( 'guest_name' ) ),
+				'guest_phone'   => sanitize_text_field( $request->get_param( 'guest_phone' ) ),
+				'bill_date'     => sanitize_text_field( $request->get_param( 'bill_date' ) ?: current_time( 'mysql' ) ),
+				'subtotal'      => $subtotal,
+				'tax_amount'    => $tax,
+				'total_amount'  => $subtotal + $tax,
+				'notes'         => sanitize_textarea_field( $request->get_param( 'notes' ) ),
+			),
+			$payment
 		);
 		$wpdb->insert( ShmppDatabase::table( 'non_border_restaurant_bills' ), $data );
 		$id  = (int) $wpdb->insert_id;
@@ -310,17 +325,22 @@ class ShmppBillingController {
 		$tax_rate = isset( $settings['tax_rate'] ) ? (float) $settings['tax_rate'] : 0;
 		$amount   = (float) $request->get_param( 'amount' );
 		$tax      = round( $amount * ( $tax_rate / 100 ), 2 );
-		$data     = array(
-			'guest_id'                => (int) $request->get_param( 'guest_id' ),
-			'booking_id'              => $request->get_param( 'booking_id' ) ? (int) $request->get_param( 'booking_id' ) : null,
-			'bill_number'             => 'LB-' . strtoupper( wp_generate_password( 8, false, false ) ),
-			'bill_date'               => sanitize_text_field( $request->get_param( 'bill_date' ) ?: gmdate( 'Y-m-d' ) ),
-			'items_description'       => sanitize_textarea_field( $request->get_param( 'items_description' ) ),
-			'amount'                  => $amount,
-			'tax_amount'              => $tax,
-			'total_amount'            => $amount + $tax,
-			'payment_status'          => sanitize_text_field( $request->get_param( 'payment_status' ) ?: 'unpaid' ),
-			'offline_payment_type_id' => $request->get_param( 'offline_payment_type_id' ) ? (int) $request->get_param( 'offline_payment_type_id' ) : null,
+		$payment  = $this->payment_fields_from_request( $request, 'unpaid' );
+		if ( is_wp_error( $payment ) ) {
+			return $payment;
+		}
+		$data     = array_merge(
+			array(
+				'guest_id'          => (int) $request->get_param( 'guest_id' ),
+				'booking_id'        => $request->get_param( 'booking_id' ) ? (int) $request->get_param( 'booking_id' ) : null,
+				'bill_number'       => 'LB-' . strtoupper( wp_generate_password( 8, false, false ) ),
+				'bill_date'         => sanitize_text_field( $request->get_param( 'bill_date' ) ?: gmdate( 'Y-m-d' ) ),
+				'items_description' => sanitize_textarea_field( $request->get_param( 'items_description' ) ),
+				'amount'            => $amount,
+				'tax_amount'        => $tax,
+				'total_amount'      => $amount + $tax,
+			),
+			$payment
 		);
 		$wpdb->insert( ShmppDatabase::table( 'laundry_bills' ), $data );
 		$id  = (int) $wpdb->insert_id;
@@ -345,23 +365,52 @@ class ShmppBillingController {
 		$tax_rate = isset( $settings['tax_rate'] ) ? (float) $settings['tax_rate'] : 0;
 		$amount   = (float) $request->get_param( 'amount' );
 		$tax      = round( $amount * ( $tax_rate / 100 ), 2 );
-		$data     = array(
-			'guest_id'                => (int) $request->get_param( 'guest_id' ),
-			'booking_id'              => $request->get_param( 'booking_id' ) ? (int) $request->get_param( 'booking_id' ) : null,
-			'bill_number'             => 'DB-' . strtoupper( wp_generate_password( 8, false, false ) ),
-			'bill_date'               => sanitize_text_field( $request->get_param( 'bill_date' ) ?: gmdate( 'Y-m-d' ) ),
-			'damage_description'      => sanitize_textarea_field( $request->get_param( 'damage_description' ) ),
-			'amount'                  => $amount,
-			'tax_amount'              => $tax,
-			'total_amount'            => $amount + $tax,
-			'payment_status'          => sanitize_text_field( $request->get_param( 'payment_status' ) ?: 'unpaid' ),
-			'offline_payment_type_id' => $request->get_param( 'offline_payment_type_id' ) ? (int) $request->get_param( 'offline_payment_type_id' ) : null,
+		$payment  = $this->payment_fields_from_request( $request, 'unpaid' );
+		if ( is_wp_error( $payment ) ) {
+			return $payment;
+		}
+		$data     = array_merge(
+			array(
+				'guest_id'           => (int) $request->get_param( 'guest_id' ),
+				'booking_id'         => $request->get_param( 'booking_id' ) ? (int) $request->get_param( 'booking_id' ) : null,
+				'bill_number'        => 'DB-' . strtoupper( wp_generate_password( 8, false, false ) ),
+				'bill_date'          => sanitize_text_field( $request->get_param( 'bill_date' ) ?: gmdate( 'Y-m-d' ) ),
+				'damage_description' => sanitize_textarea_field( $request->get_param( 'damage_description' ) ),
+				'amount'             => $amount,
+				'tax_amount'         => $tax,
+				'total_amount'       => $amount + $tax,
+			),
+			$payment
 		);
 		$wpdb->insert( ShmppDatabase::table( 'damage_bills' ), $data );
 		$id  = (int) $wpdb->insert_id;
 		$db_table = ShmppDatabase::table( 'damage_bills' );
 		$row      = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $db_table, $id ), ARRAY_A );
 		return rest_ensure_response( $row );
+	}
+
+	/**
+	 * Shared payment_status / reference / offline type fields.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @param string          $default_status Default payment status.
+	 * @return array|WP_Error
+	 */
+	private function payment_fields_from_request( $request, $default_status = 'unpaid' ) {
+		$status    = sanitize_text_field( $request->get_param( 'payment_status' ) ?: $default_status );
+		$reference = sanitize_text_field( $request->get_param( 'payment_reference' ) );
+		if ( in_array( $status, array( 'paid' ), true ) && '' === $reference ) {
+			return new WP_Error(
+				'payment_reference_required',
+				'A payment reference number is required for paid bills (cheque number, card transaction ID, transfer reference, etc.).',
+				array( 'status' => 400 )
+			);
+		}
+		return array(
+			'payment_status'          => $status,
+			'offline_payment_type_id' => $request->get_param( 'offline_payment_type_id' ) ? (int) $request->get_param( 'offline_payment_type_id' ) : null,
+			'payment_reference'       => $reference ? $reference : null,
+		);
 	}
 
 	public function list_payment_types() {

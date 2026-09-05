@@ -38,6 +38,7 @@ class ShmppSettingsController {
 
 	public function get_settings() {
 		$settings = get_option( 'shmpp_settings', array() );
+		$settings['stripe_webhook_url'] = rest_url( self::NS . '/payments/stripe/webhook' );
 		return rest_ensure_response( $settings );
 	}
 
@@ -86,6 +87,14 @@ class ShmppSettingsController {
 			'address',
 			'phone',
 			'email',
+			'stripe_enabled',
+			'stripe_publishable_key',
+			'stripe_secret_key',
+			'stripe_webhook_secret',
+			'manual_payment_enabled',
+			'manual_payment_title',
+			'manual_payment_instructions',
+			'frontend_primary_color',
 		);
 
 		foreach ( $allowed as $key ) {
@@ -95,14 +104,20 @@ class ShmppSettingsController {
 			$value = $incoming[ $key ];
 			if ( in_array( $key, array( 'tax_rate', 'booking_page_id' ), true ) ) {
 				$current[ $key ] = (float) $value;
-			} elseif ( 'enable_frontend' === $key ) {
+			} elseif ( in_array( $key, array( 'enable_frontend', 'stripe_enabled', 'manual_payment_enabled' ), true ) ) {
 				$current[ $key ] = (bool) $value;
+			} elseif ( 'manual_payment_instructions' === $key ) {
+				$current[ $key ] = sanitize_textarea_field( $value );
+			} elseif ( 'frontend_primary_color' === $key ) {
+				$hex = ShmppColors::sanitize_hex( $value );
+				$current[ $key ] = $hex ? $hex : ShmppColors::DEFAULT_PRIMARY;
 			} else {
 				$current[ $key ] = sanitize_text_field( $value );
 			}
 		}
 
 		update_option( 'shmpp_settings', $current );
+		$current['stripe_webhook_url'] = rest_url( self::NS . '/payments/stripe/webhook' );
 		return rest_ensure_response( $current );
 	}
 }

@@ -15,6 +15,8 @@ class ShmppRestAPI {
 			new ShmppRestaurantsController(),
 			new ShmppAmenitiesController(),
 			new ShmppTrashController(),
+			new ShmppChannelsController(),
+			new ShmppPaymentsController(),
 		);
 
 		foreach ( $controllers as $controller ) {

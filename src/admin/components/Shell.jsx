@@ -9,7 +9,10 @@ export default function Shell({ page, setPage, children }) {
     { id: 'billing', label: 'Billing' },
     { id: 'staff', label: 'Staff' },
     { id: 'restaurants', label: 'Restaurants' },
+    { id: 'channels', label: 'Channels' },
+    { id: 'channel-help', label: 'Channex help' },
     { id: 'trash', label: 'Trash' },
+    { id: 'payments', label: 'Payment settings' },
     { id: 'settings', label: 'Settings' },
   ];
 

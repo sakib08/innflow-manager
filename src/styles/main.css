@@ -4,9 +4,29 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
 
+/*
+ * Brand palette defaults live only on mount roots.
+ * Nested .shmpp-root wrappers must NOT redefine these, or custom
+ * frontend_primary_color overrides would be reset for all children.
+ */
+#shmpp-frontend-root,
+#shmpp-admin-root {
+  --shmpp-brand-50: #f0f7f4;
+  --shmpp-brand-100: #dceee5;
+  --shmpp-brand-200: #bbddd0;
+  --shmpp-brand-300: #8ec5b2;
+  --shmpp-brand-400: #5fa690;
+  --shmpp-brand-500: #3f8a74;
+  --shmpp-brand-600: #2f6e5d;
+  --shmpp-brand-700: #27584c;
+  --shmpp-brand-800: #22473e;
+  --shmpp-brand-900: #1e3b35;
+  --shmpp-brand-950: #0f211e;
+}
+
 .shmpp-root {
   font-family: 'Source Sans 3', system-ui, sans-serif;
-  color: #1e3b35;
+  color: var(--shmpp-brand-900);
 }
 
 .shmpp-root h1,

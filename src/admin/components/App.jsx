@@ -9,7 +9,10 @@ import GuestsPage from './GuestsPage';
 import BillingPage from './BillingPage';
 import StaffPage from './StaffPage';
 import RestaurantsPage from './RestaurantsPage';
+import ChannelsPage from './ChannelsPage';
+import ChannelHelpPage from './ChannelHelpPage';
 import SettingsPage from './SettingsPage';
+import PaymentSettingsPage from './PaymentSettingsPage';
 import TrashPage from './TrashPage';
 
 export default function App() {
@@ -24,7 +27,10 @@ export default function App() {
     billing: <BillingPage />,
     staff: <StaffPage />,
     restaurants: <RestaurantsPage />,
+    channels: <ChannelsPage />,
+    'channel-help': <ChannelHelpPage />,
     trash: <TrashPage />,
+    payments: <PaymentSettingsPage />,
     settings: <SettingsPage />,
   }[page] || <Dashboard />;
 

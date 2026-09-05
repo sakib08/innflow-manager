@@ -274,6 +274,16 @@ class ShmppEmployeesController {
 		$employee_id  = (int) $request->get_param( 'employee_id' );
 		$salary_month = sanitize_text_field( $request->get_param( 'salary_month' ) );
 
+		$payment_status = sanitize_text_field( $request->get_param( 'payment_status' ) ?: 'pending' );
+		$payment_reference = sanitize_text_field( $request->get_param( 'payment_reference' ) );
+		if ( 'paid' === $payment_status && '' === $payment_reference ) {
+			return new WP_Error(
+				'payment_reference_required',
+				'A payment reference number is required when a salary is marked paid.',
+				array( 'status' => 400 )
+			);
+		}
+
 		$data = array(
 			'employee_id'             => $employee_id,
 			'salary_month'            => $salary_month,
@@ -281,9 +291,10 @@ class ShmppEmployeesController {
 			'allowances'              => $all,
 			'deductions'              => $ded,
 			'net_salary'              => $base + $all - $ded,
-			'payment_status'          => sanitize_text_field( $request->get_param( 'payment_status' ) ?: 'pending' ),
+			'payment_status'          => $payment_status,
 			'paid_at'                 => $request->get_param( 'paid_at' ) ? sanitize_text_field( $request->get_param( 'paid_at' ) ) : null,
 			'offline_payment_type_id' => $request->get_param( 'offline_payment_type_id' ) ? (int) $request->get_param( 'offline_payment_type_id' ) : null,
+			'payment_reference'       => $payment_reference ? $payment_reference : null,
 			'notes'                   => sanitize_textarea_field( $request->get_param( 'notes' ) ),
 		);
 

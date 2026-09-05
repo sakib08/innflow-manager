@@ -36,7 +36,10 @@ class ShmppAdmin {
 			'staynexus-hotel-manager-billing'    => __( 'Billing', 'staynexus-hotel-manager' ),
 			'staynexus-hotel-manager-staff'      => __( 'Staff', 'staynexus-hotel-manager' ),
 			'staynexus-hotel-manager-restaurants' => __( 'Restaurants', 'staynexus-hotel-manager' ),
+			'staynexus-hotel-manager-channels'   => __( 'Channels', 'staynexus-hotel-manager' ),
+			'staynexus-hotel-manager-channel-help' => __( 'Channex help', 'staynexus-hotel-manager' ),
 			'staynexus-hotel-manager-trash'       => __( 'Trash', 'staynexus-hotel-manager' ),
+			'staynexus-hotel-manager-payments'   => __( 'Payment settings', 'staynexus-hotel-manager' ),
 			'staynexus-hotel-manager-settings'   => __( 'Settings', 'staynexus-hotel-manager' ),
 		);
 
@@ -53,7 +56,7 @@ class ShmppAdmin {
 	}
 
 	public function render_app() {
-		echo '<div class="wrap"><div id="shmpp-admin-root" class="shmpp-admin-app"></div></div>';
+		echo '<div class="wrap"><div id="shmpp-admin-root" class="shmpp-admin-app shmpp-root"></div></div>';
 	}
 
 	public function enqueue_assets( $hook ) {

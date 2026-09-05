@@ -594,6 +594,8 @@ class ShmppRoomsController {
 			$id = (int) $wpdb->insert_id;
 		}
 
+		do_action( 'shmpp_booking_inventory_changed', $data['room_type_id'], $data['slot_date'], $data['slot_date'] );
+
 		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $table, $id ), ARRAY_A );
 		return rest_ensure_response( $row );
 	}

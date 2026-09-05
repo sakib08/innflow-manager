@@ -176,6 +176,20 @@ class ShmppTrash {
 			}
 		}
 
+		// Release inventory before soft-delete so channel sync sees free rooms.
+		if ( 'bookings' === $type && empty( $row['deleted_at'] ) && ! empty( $row['check_in'] ) && ! empty( $row['check_out'] ) ) {
+			$status = isset( $row['booking_status'] ) ? $row['booking_status'] : '';
+			if ( 'cancelled' !== $status ) {
+				ShmppInventory::release(
+					(int) $row['room_type_id'],
+					$row['check_in'],
+					$row['check_out'],
+					isset( $row['rooms_count'] ) ? (int) $row['rooms_count'] : 1
+				);
+				do_action( 'shmpp_booking_inventory_changed', (int) $row['room_type_id'], $row['check_in'], $row['check_out'] );
+			}
+		}
+
 		$wpdb->update( $table, $data, array( 'id' => $id ) );
 
 		// Cascade soft-delete for tightly coupled children.

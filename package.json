@@ -1,6 +1,6 @@
 {
   "name": "staynexus-hotel-manager",
-  "version": "1.0.4",
+  "version": "1.1.1",
   "private": true,
   "scripts": {
     "build:css": "tailwindcss -i ./src/styles/main.css -o ./assets/dist/admin.css --minify && cp ./assets/dist/admin.css ./assets/dist/frontend.css",

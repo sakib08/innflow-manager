@@ -69,6 +69,16 @@ class ShmppBookingsController {
 
 		register_rest_route(
 			self::NS,
+			'/bookings/(?P<id>\d+)/mark-paid',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'mark_paid' ),
+				'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/discounts',
 			array(
 				array(
@@ -247,6 +257,19 @@ class ShmppBookingsController {
 		$guest_id = (int) $wpdb->insert_id;
 
 		$booking_code = 'SHM-' . strtoupper( wp_generate_password( 8, false, false ) );
+		$payment_method = sanitize_text_field( $request->get_param( 'payment_method' ) ?: 'pay_at_hotel' );
+		if ( ! in_array( $payment_method, array( 'pay_at_hotel', 'stripe', 'manual' ), true ) ) {
+			$payment_method = 'pay_at_hotel';
+		}
+		$payment_status    = sanitize_text_field( $request->get_param( 'payment_status' ) ?: 'pending' );
+		$payment_reference = sanitize_text_field( $request->get_param( 'payment_reference' ) );
+		if ( 'paid' === $payment_status && '' === $payment_reference ) {
+			return new WP_Error(
+				'payment_reference_required',
+				'A payment reference number is required when marking a booking as paid (cheque number, card transaction ID, transfer reference, etc.).',
+				array( 'status' => 400 )
+			);
+		}
 		$booking_data = array(
 			'booking_code'            => $booking_code,
 			'guest_id'                => $guest_id,
@@ -263,11 +286,14 @@ class ShmppBookingsController {
 			'total_amount'            => $total,
 			// This endpoint requires 'manage_options'; staff creating a booking may record
 			// the payment status directly (e.g. paid in person at check-in).
-			'payment_status'          => sanitize_text_field( $request->get_param( 'payment_status' ) ?: 'pending' ),
+			'payment_status'          => $payment_status,
+			'payment_method'          => $payment_method,
+			'payment_reference'       => $payment_reference ? $payment_reference : null,
 			'booking_status'          => 'confirmed',
 			'offline_payment_type_id' => $request->get_param( 'offline_payment_type_id' )
 				? (int) $request->get_param( 'offline_payment_type_id' )
 				: null,
+			'source'                  => 'direct',
 			'notes'                   => sanitize_textarea_field( $request->get_param( 'notes' ) ),
 		);
 
@@ -297,7 +323,8 @@ class ShmppBookingsController {
 			)
 		);
 
-		$this->reserve_slots( $room_type_id, $check_in, $check_out, $rooms_count );
+		ShmppInventory::reserve( $room_type_id, $check_in, $check_out, $rooms_count );
+		do_action( 'shmpp_booking_inventory_changed', $room_type_id, $check_in, $check_out );
 
 		if ( $discount_id ) {
 			$disc_table = ShmppDatabase::table( 'discounts' );
@@ -316,15 +343,110 @@ class ShmppBookingsController {
 		global $wpdb;
 		$id = (int) $request['id'];
 		$data = array();
-		foreach ( array( 'booking_status', 'payment_status', 'notes' ) as $field ) {
+		foreach ( array( 'booking_status', 'payment_status', 'payment_method', 'payment_reference', 'notes' ) as $field ) {
 			if ( null !== $request->get_param( $field ) ) {
 				$data[ $field ] = sanitize_text_field( $request->get_param( $field ) );
 			}
 		}
+		if ( null !== $request->get_param( 'offline_payment_type_id' ) ) {
+			$ptid = $request->get_param( 'offline_payment_type_id' );
+			$data['offline_payment_type_id'] = $ptid ? (int) $ptid : null;
+		}
+		if ( isset( $data['payment_status'] ) && 'paid' === $data['payment_status'] ) {
+			$ref = isset( $data['payment_reference'] ) ? $data['payment_reference'] : $request->get_param( 'payment_reference' );
+			$ref = is_string( $ref ) ? trim( $ref ) : '';
+			if ( '' === $ref ) {
+				return new WP_Error(
+					'payment_reference_required',
+					'A payment reference number is required when marking a booking as paid.',
+					array( 'status' => 400 )
+				);
+			}
+			$data['payment_reference'] = sanitize_text_field( $ref );
+		}
 		if ( $data ) {
 			$wpdb->update( ShmppDatabase::table( 'bookings' ), $data, array( 'id' => $id ) );
+			if ( isset( $data['payment_status'] ) && 'paid' === $data['payment_status'] ) {
+				$this->mark_room_bills_paid(
+					$id,
+					isset( $data['offline_payment_type_id'] ) ? $data['offline_payment_type_id'] : null,
+					isset( $data['payment_reference'] ) ? $data['payment_reference'] : null
+				);
+			}
 		}
 		return $this->get_booking( $request );
+	}
+
+	/**
+	 * Record a manual / offline payment as paid.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function mark_paid( $request ) {
+		global $wpdb;
+		$id = (int) $request['id'];
+		if ( ! $id ) {
+			return new WP_Error( 'invalid', 'Invalid booking', array( 'status' => 400 ) );
+		}
+
+		$reference = sanitize_text_field( $request->get_param( 'payment_reference' ) );
+		if ( '' === $reference ) {
+			return new WP_Error(
+				'payment_reference_required',
+				'Enter a payment reference number (cheque number, card transaction ID, bank transfer reference, etc.).',
+				array( 'status' => 400 )
+			);
+		}
+
+		$table = ShmppDatabase::table( 'bookings' );
+		$row   = $wpdb->get_row(
+			$wpdb->prepare( 'SELECT id FROM %i WHERE id = %d AND deleted_at IS NULL', $table, $id ),
+			ARRAY_A
+		);
+		if ( ! $row ) {
+			return new WP_Error( 'not_found', 'Booking not found', array( 'status' => 404 ) );
+		}
+
+		$offline_id = $request->get_param( 'offline_payment_type_id' )
+			? (int) $request->get_param( 'offline_payment_type_id' )
+			: null;
+
+		$data = array(
+			'payment_status'    => 'paid',
+			'payment_reference' => $reference,
+		);
+		if ( $offline_id ) {
+			$data['offline_payment_type_id'] = $offline_id;
+		}
+
+		$wpdb->update( $table, $data, array( 'id' => $id ) );
+		$this->mark_room_bills_paid( $id, $offline_id, $reference );
+
+		return $this->get_booking( $request );
+	}
+
+	/**
+	 * @param int         $booking_id Booking ID.
+	 * @param int|null    $offline_payment_type_id Optional offline type.
+	 * @param string|null $payment_reference Payment reference number.
+	 */
+	private function mark_room_bills_paid( $booking_id, $offline_payment_type_id = null, $payment_reference = null ) {
+		global $wpdb;
+		$bill_data = array( 'payment_status' => 'paid' );
+		if ( $offline_payment_type_id ) {
+			$bill_data['offline_payment_type_id'] = (int) $offline_payment_type_id;
+		}
+		if ( $payment_reference ) {
+			$bill_data['payment_reference'] = sanitize_text_field( $payment_reference );
+		}
+		$wpdb->update(
+			ShmppDatabase::table( 'room_bills' ),
+			$bill_data,
+			array(
+				'booking_id' => (int) $booking_id,
+			)
+		);
 	}
 
 	public function checkin( $request ) {
@@ -449,43 +571,5 @@ class ShmppBookingsController {
 			return null;
 		}
 		return $row;
-	}
-
-	private function reserve_slots( $room_type_id, $check_in, $check_out, $rooms_count ) {
-		global $wpdb;
-		$table  = ShmppDatabase::table( 'booking_date_slots' );
-		$rooms  = ShmppDatabase::table( 'room_types' );
-		$total  = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT total_rooms FROM %i WHERE id = %d', $rooms, $room_type_id ) );
-		$date   = $check_in;
-		$nights = (int) ( ( strtotime( $check_out ) - strtotime( $check_in ) ) / DAY_IN_SECONDS );
-
-		for ( $i = 0; $i < $nights; $i++ ) {
-			$existing = $wpdb->get_row(
-				$wpdb->prepare( 'SELECT * FROM %i WHERE room_type_id = %d AND slot_date = %s AND deleted_at IS NULL', $table, $room_type_id,
-					$date
-				),
-				ARRAY_A
-			);
-
-			if ( $existing ) {
-				$wpdb->update(
-					$table,
-					array( 'booked_rooms' => (int) $existing['booked_rooms'] + $rooms_count ),
-					array( 'id' => (int) $existing['id'] )
-				);
-			} else {
-				$wpdb->insert(
-					$table,
-					array(
-						'room_type_id'    => $room_type_id,
-						'slot_date'       => $date,
-						'available_rooms' => $total,
-						'booked_rooms'    => $rooms_count,
-						'status'          => 'open',
-					)
-				);
-			}
-			$date = gmdate( 'Y-m-d', strtotime( $date . ' +1 day' ) );
-		}
 	}
 }

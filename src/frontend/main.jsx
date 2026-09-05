@@ -144,6 +144,9 @@ function RoomCard({
 function SearchApp() {
   const cfg = getFrontendConfig();
   const settings = cfg.settings || {};
+  const stripeEnabled = !!(cfg.stripe && cfg.stripe.enabled);
+  const manualPayment = cfg.manualPayment || {};
+  const manualEnabled = !!manualPayment.enabled;
   const [query, setQuery] = useState(defaultStay);
   const [catalog, setCatalog] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
@@ -161,9 +164,14 @@ function SearchApp() {
     address: '',
     discount_code: '',
   });
+  const [paymentMethod, setPaymentMethod] = useState(
+    stripeEnabled ? 'stripe' : manualEnabled ? 'manual' : 'pay_at_hotel'
+  );
   const [booking, setBooking] = useState(null);
+  const [manualInfo, setManualInfo] = useState(null);
   const [step, setStep] = useState('browse');
   const [detailsRoom, setDetailsRoom] = useState(null);
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
 
   const nights = useMemo(
     () => nightsBetween(query.check_in, query.check_out),
@@ -190,6 +198,56 @@ function SearchApp() {
       .finally(() => {
         if (!cancelled) setCatalogLoading(false);
       });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Return from Stripe Checkout: confirm session and show success.
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const params = new URLSearchParams(window.location.search);
+    const stripeStatus = params.get('shmpp_stripe');
+    const sessionId = params.get('session_id');
+
+    if (stripeStatus === 'cancel') {
+      setError('Payment was cancelled. Your reservation is held as awaiting payment — you can try again or pay at the hotel.');
+      params.delete('shmpp_stripe');
+      params.delete('booking_id');
+      params.delete('session_id');
+      const clean = `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash || ''}`;
+      window.history.replaceState({}, '', clean);
+      return undefined;
+    }
+
+    if (stripeStatus !== 'success' || !sessionId) return undefined;
+
+    let cancelled = false;
+    setConfirmingPayment(true);
+    setError('');
+    api('/payments/stripe/confirm', {
+      method: 'POST',
+      body: { session_id: sessionId },
+    })
+      .then((data) => {
+        if (cancelled) return;
+        if (data.booking) {
+          setBooking(data.booking);
+          setStep('success');
+        }
+        params.delete('shmpp_stripe');
+        params.delete('session_id');
+        params.delete('booking_id');
+        const clean = `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash || ''}`;
+        window.history.replaceState({}, '', clean);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || 'Could not confirm Stripe payment');
+      })
+      .finally(() => {
+        if (!cancelled) setConfirmingPayment(false);
+      });
+
     return () => {
       cancelled = true;
     };
@@ -258,12 +316,39 @@ function SearchApp() {
     setStep('book');
   };
 
+  const checkoutReturnUrls = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('shmpp_stripe');
+    url.searchParams.delete('session_id');
+    url.searchParams.delete('booking_id');
+
+    const success = new URL(url.toString());
+    success.searchParams.set('shmpp_stripe', 'success');
+    // Stripe replaces this literal token — keep braces unencoded.
+    let successUrl = success.toString();
+    const sep = successUrl.includes('?') ? '&' : '?';
+    successUrl = `${successUrl}${sep}session_id={CHECKOUT_SESSION_ID}`;
+
+    const cancel = new URL(url.toString());
+    cancel.searchParams.set('shmpp_stripe', 'cancel');
+
+    return {
+      success_url: successUrl,
+      cancel_url: cancel.toString(),
+    };
+  };
+
   const book = async () => {
     if (!selected) return;
+    if (paymentMethod === 'stripe' && !guest.email) {
+      setError('Email is required to pay with Stripe.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      const data = await api('/bookings', {
+      const urls = checkoutReturnUrls();
+      const data = await api('/checkout', {
         method: 'POST',
         body: {
           ...guest,
@@ -274,9 +359,18 @@ function SearchApp() {
           children: query.children,
           rooms_count: query.rooms,
           discount_code: guest.discount_code || undefined,
+          payment_method: paymentMethod,
+          ...urls,
         },
       });
-      setBooking(data);
+
+      if (data.payment_method === 'stripe' && data.checkout_url) {
+        window.location.href = data.checkout_url;
+        return;
+      }
+
+      setManualInfo(data.payment_method === 'manual' ? data.manual || manualPayment : null);
+      setBooking(data.booking || data);
       setStep('success');
     } catch (err) {
       setError(err.message);
@@ -290,8 +384,14 @@ function SearchApp() {
     setResults(null);
     setSelected(null);
     setBooking(null);
+    setManualInfo(null);
     setError('');
   };
+
+  const canConfirm =
+    guest.first_name &&
+    guest.last_name &&
+    (paymentMethod !== 'stripe' || !!guest.email);
 
   const detailsForModal = detailsRoom
     ? {
@@ -305,7 +405,7 @@ function SearchApp() {
     : null;
 
   return (
-    <div className="shmpp-root shmpp-frontend-app mx-auto max-w-5xl">
+    <div className="shmpp-frontend-app mx-auto max-w-5xl">
       <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-brand-900 via-brand-800 to-brand-700 text-white shadow-xl">
         <div className="relative px-6 py-10 sm:px-10">
           <div
@@ -375,10 +475,12 @@ function SearchApp() {
         <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
 
+      {confirmingPayment && <Loading />}
+
       {loading && step !== 'success' && step !== 'book' && <Loading />}
 
       {/* Browse catalog — hidden after a Reservations search */}
-      {step === 'browse' && (
+      {step === 'browse' && !confirmingPayment && (
         <div className="mt-8 space-y-4">
           <div>
             <h2 className="font-display text-2xl font-bold text-brand-950">Available rooms</h2>
@@ -506,9 +608,71 @@ function SearchApp() {
               ))}
             </Select>
           </div>
+
+          <fieldset className="mt-6 space-y-2">
+            <legend className="mb-2 text-sm font-medium text-brand-800">Payment</legend>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-sand-200 p-3 hover:bg-sand-50">
+              <input
+                type="radio"
+                name="payment_method"
+                className="mt-1 border-sand-300 text-brand-700 focus:ring-brand-500"
+                checked={paymentMethod === 'pay_at_hotel'}
+                onChange={() => setPaymentMethod('pay_at_hotel')}
+              />
+              <span>
+                <span className="block text-sm font-semibold text-brand-950">Pay at hotel</span>
+                <span className="text-xs text-brand-600">Reserve now and settle at check-in.</span>
+              </span>
+            </label>
+            {stripeEnabled && (
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-sand-200 p-3 hover:bg-sand-50">
+                <input
+                  type="radio"
+                  name="payment_method"
+                  className="mt-1 border-sand-300 text-brand-700 focus:ring-brand-500"
+                  checked={paymentMethod === 'stripe'}
+                  onChange={() => setPaymentMethod('stripe')}
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-brand-950">Pay with card (Stripe)</span>
+                  <span className="text-xs text-brand-600">
+                    Secure checkout powered by Stripe. You’ll be redirected to complete payment.
+                  </span>
+                </span>
+              </label>
+            )}
+            {manualEnabled && (
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-sand-200 p-3 hover:bg-sand-50">
+                <input
+                  type="radio"
+                  name="payment_method"
+                  className="mt-1 border-sand-300 text-brand-700 focus:ring-brand-500"
+                  checked={paymentMethod === 'manual'}
+                  onChange={() => setPaymentMethod('manual')}
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-brand-950">
+                    {manualPayment.title || 'Bank transfer / Manual payment'}
+                  </span>
+                  <span className="text-xs text-brand-600">
+                    Confirm your booking, then follow the payment instructions we show next.
+                  </span>
+                </span>
+              </label>
+            )}
+          </fieldset>
+
           <div className="mt-6 flex justify-end">
-            <Button onClick={book} disabled={loading || !guest.first_name || !guest.last_name}>
-              {loading ? 'Booking…' : 'Confirm booking'}
+            <Button onClick={book} disabled={loading || !canConfirm}>
+              {loading
+                ? paymentMethod === 'stripe'
+                  ? 'Redirecting…'
+                  : 'Booking…'
+                : paymentMethod === 'stripe'
+                  ? 'Pay & confirm'
+                  : paymentMethod === 'manual'
+                    ? 'Confirm & get payment details'
+                    : 'Confirm booking'}
             </Button>
           </div>
         </Card>
@@ -516,7 +680,13 @@ function SearchApp() {
 
       {step === 'success' && booking && (
         <Card className="mt-8 border-emerald-200 bg-emerald-50/50 p-8 text-center">
-          <p className="text-sm font-semibold uppercase tracking-widest text-emerald-700">Booking confirmed</p>
+          <p className="text-sm font-semibold uppercase tracking-widest text-emerald-700">
+            {booking.payment_status === 'paid'
+              ? 'Payment received · Booking confirmed'
+              : booking.payment_method === 'manual'
+                ? 'Booking reserved · Awaiting payment'
+                : 'Booking confirmed'}
+          </p>
           <h2 className="mt-2 font-display text-3xl font-bold text-brand-950">{booking.booking_code}</h2>
           <p className="mt-2 text-brand-700">
             {booking.first_name} {booking.last_name} · {booking.room_name}
@@ -524,6 +694,28 @@ function SearchApp() {
           <p className="mt-1 text-sm text-brand-600">
             {booking.check_in} → {booking.check_out} · {money(booking.total_amount, settings)}
           </p>
+          {booking.payment_status && booking.payment_status !== 'paid' && !manualInfo && (
+            <p className="mt-2 text-sm text-brand-600">Payment status: {booking.payment_status}</p>
+          )}
+          {manualInfo && (
+            <div className="mt-6 rounded-xl border border-amber-200 bg-white p-5 text-left">
+              <h3 className="font-display text-lg font-semibold text-brand-950">
+                {manualInfo.title || 'Payment instructions'}
+              </h3>
+              <p className="mt-1 text-sm text-brand-600">
+                Please use booking code <strong>{booking.booking_code}</strong> as your payment reference.
+              </p>
+              {manualInfo.instructions ? (
+                <pre className="mt-3 whitespace-pre-wrap font-sans text-sm text-brand-800">
+                  {manualInfo.instructions}
+                </pre>
+              ) : (
+                <p className="mt-3 text-sm text-brand-600">
+                  The hotel will contact you with payment details, or pay at the front desk using your booking code.
+                </p>
+              )}
+            </div>
+          )}
           <Button className="mt-6" variant="secondary" onClick={backToBrowse}>
             Make another booking
           </Button>

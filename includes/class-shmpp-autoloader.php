@@ -19,6 +19,11 @@ class ShmppAutoloader {
 			'ShmppDatabase'               => 'class-shmpp-database.php',
 			'ShmppTrash'                  => 'class-shmpp-trash.php',
 			'ShmppXlsxWriter'            => 'class-shmpp-xlsx-writer.php',
+			'ShmppInventory'              => 'class-shmpp-inventory.php',
+			'ShmppChannexClient'          => 'class-shmpp-channex-client.php',
+			'ShmppChannelSync'            => 'class-shmpp-channel-sync.php',
+			'ShmppStripe'                 => 'class-shmpp-stripe.php',
+			'ShmppColors'                 => 'class-shmpp-colors.php',
 			'ShmppAdmin'                  => 'class-shmpp-admin.php',
 			'ShmppFrontend'               => 'class-shmpp-frontend.php',
 			'ShmppRestAPI'               => 'api/class-shmpp-rest-api.php',
@@ -32,6 +37,8 @@ class ShmppAutoloader {
 			'ShmppRestaurantsController' => 'api/class-shmpp-restaurants-controller.php',
 			'ShmppAmenitiesController'   => 'api/class-shmpp-amenities-controller.php',
 			'ShmppTrashController'       => 'api/class-shmpp-trash-controller.php',
+			'ShmppChannelsController'    => 'api/class-shmpp-channels-controller.php',
+			'ShmppPaymentsController'    => 'api/class-shmpp-payments-controller.php',
 		);
 
 		if ( ! isset( $map[ $class ] ) ) {

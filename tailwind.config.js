@@ -5,17 +5,17 @@ module.exports = {
     extend: {
       colors: {
         brand: {
-          50: '#f0f7f4',
-          100: '#dceee5',
-          200: '#bbddd0',
-          300: '#8ec5b2',
-          400: '#5fa690',
-          500: '#3f8a74',
-          600: '#2f6e5d',
-          700: '#27584c',
-          800: '#22473e',
-          900: '#1e3b35',
-          950: '#0f211e',
+          50: 'var(--shmpp-brand-50, #f0f7f4)',
+          100: 'var(--shmpp-brand-100, #dceee5)',
+          200: 'var(--shmpp-brand-200, #bbddd0)',
+          300: 'var(--shmpp-brand-300, #8ec5b2)',
+          400: 'var(--shmpp-brand-400, #5fa690)',
+          500: 'var(--shmpp-brand-500, #3f8a74)',
+          600: 'var(--shmpp-brand-600, #2f6e5d)',
+          700: 'var(--shmpp-brand-700, #27584c)',
+          800: 'var(--shmpp-brand-800, #22473e)',
+          900: 'var(--shmpp-brand-900, #1e3b35)',
+          950: 'var(--shmpp-brand-950, #0f211e)',
         },
         sand: {
           50: '#faf8f5',

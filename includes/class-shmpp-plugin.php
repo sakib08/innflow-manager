@@ -19,6 +19,8 @@ class ShmppPlugin {
 	private function init_hooks() {
 		add_action( 'rest_api_init', array( 'ShmppRestAPI', 'register_routes' ) );
 
+		ShmppChannelSync::init();
+
 		if ( is_admin() ) {
 			ShmppAdmin::instance();
 		}

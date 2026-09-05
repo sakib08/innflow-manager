@@ -5,7 +5,7 @@ defined( 'ABSPATH' ) || exit;
 
 class ShmppDatabase {
 
-	const DB_VERSION = '1.7.0';
+	const DB_VERSION = '1.11.0';
 
 	/**
 	 * Allowed custom-table suffixes (never accept arbitrary caller input).
@@ -34,6 +34,9 @@ class ShmppDatabase {
 			'employee_roles',
 			'employees',
 			'employee_salaries',
+			'channel_connections',
+			'channel_room_maps',
+			'channel_sync_log',
 		);
 	}
 
@@ -198,8 +201,16 @@ class ShmppDatabase {
 			tax_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
 			total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
 			payment_status VARCHAR(30) NOT NULL DEFAULT 'pending',
+			payment_method VARCHAR(30) NOT NULL DEFAULT 'pay_at_hotel',
+			payment_reference VARCHAR(191) NULL,
 			booking_status VARCHAR(30) NOT NULL DEFAULT 'confirmed',
 			offline_payment_type_id BIGINT UNSIGNED NULL,
+			stripe_session_id VARCHAR(191) NULL,
+			stripe_payment_intent_id VARCHAR(191) NULL,
+			source VARCHAR(50) NOT NULL DEFAULT 'direct',
+			external_id VARCHAR(191) NULL,
+			external_revision_id VARCHAR(191) NULL,
+			channel_meta LONGTEXT NULL,
 			notes TEXT NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -211,6 +222,9 @@ class ShmppDatabase {
 			KEY check_in (check_in),
 			KEY check_out (check_out),
 			KEY booking_status (booking_status),
+			KEY source (source),
+			KEY external_id (external_id),
+			KEY stripe_session_id (stripe_session_id),
 			KEY deleted_at (deleted_at)
 		) $charset;";
 
@@ -246,6 +260,7 @@ class ShmppDatabase {
 			bill_date DATE NOT NULL,
 			payment_status VARCHAR(30) NOT NULL DEFAULT 'unpaid',
 			offline_payment_type_id BIGINT UNSIGNED NULL,
+			payment_reference VARCHAR(191) NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			deleted_at DATETIME NULL,
 			PRIMARY KEY (id),
@@ -279,6 +294,7 @@ class ShmppDatabase {
 			total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
 			payment_status VARCHAR(30) NOT NULL DEFAULT 'unpaid',
 			offline_payment_type_id BIGINT UNSIGNED NULL,
+			payment_reference VARCHAR(191) NULL,
 			notes TEXT NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			deleted_at DATETIME NULL,
@@ -314,6 +330,7 @@ class ShmppDatabase {
 			total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
 			payment_status VARCHAR(30) NOT NULL DEFAULT 'paid',
 			offline_payment_type_id BIGINT UNSIGNED NULL,
+			payment_reference VARCHAR(191) NULL,
 			notes TEXT NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			deleted_at DATETIME NULL,
@@ -336,6 +353,7 @@ class ShmppDatabase {
 			total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
 			payment_status VARCHAR(30) NOT NULL DEFAULT 'unpaid',
 			offline_payment_type_id BIGINT UNSIGNED NULL,
+			payment_reference VARCHAR(191) NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			deleted_at DATETIME NULL,
 			PRIMARY KEY (id),
@@ -358,6 +376,7 @@ class ShmppDatabase {
 			total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
 			payment_status VARCHAR(30) NOT NULL DEFAULT 'unpaid',
 			offline_payment_type_id BIGINT UNSIGNED NULL,
+			payment_reference VARCHAR(191) NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			deleted_at DATETIME NULL,
 			PRIMARY KEY (id),
@@ -413,6 +432,7 @@ class ShmppDatabase {
 			payment_status VARCHAR(30) NOT NULL DEFAULT 'pending',
 			paid_at DATETIME NULL,
 			offline_payment_type_id BIGINT UNSIGNED NULL,
+			payment_reference VARCHAR(191) NULL,
 			notes TEXT NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			deleted_at DATETIME NULL,
@@ -422,13 +442,182 @@ class ShmppDatabase {
 			KEY deleted_at (deleted_at)
 		) $charset;";
 
+		$tables[] = "CREATE TABLE " . self::table( 'channel_connections' ) . " (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			provider VARCHAR(50) NOT NULL DEFAULT 'channex',
+			api_key TEXT NULL,
+			property_id VARCHAR(191) NULL,
+			environment VARCHAR(20) NOT NULL DEFAULT 'staging',
+			is_active TINYINT(1) NOT NULL DEFAULT 0,
+			webhook_secret VARCHAR(64) NULL,
+			last_ari_sync_at DATETIME NULL,
+			last_booking_sync_at DATETIME NULL,
+			last_error TEXT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			KEY provider (provider),
+			KEY is_active (is_active)
+		) $charset;";
+
+		$tables[] = "CREATE TABLE " . self::table( 'channel_room_maps' ) . " (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			connection_id BIGINT UNSIGNED NOT NULL,
+			room_type_id BIGINT UNSIGNED NOT NULL,
+			external_room_type_id VARCHAR(191) NOT NULL,
+			external_rate_plan_id VARCHAR(191) NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			UNIQUE KEY connection_room (connection_id, room_type_id),
+			KEY external_room_type_id (external_room_type_id),
+			KEY connection_id (connection_id)
+		) $charset;";
+
+		$tables[] = "CREATE TABLE " . self::table( 'channel_sync_log' ) . " (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			connection_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			direction VARCHAR(20) NOT NULL DEFAULT 'out',
+			event_type VARCHAR(50) NOT NULL,
+			status VARCHAR(20) NOT NULL DEFAULT 'ok',
+			message TEXT NULL,
+			payload LONGTEXT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			KEY connection_id (connection_id),
+			KEY event_type (event_type),
+			KEY created_at (created_at)
+		) $charset;";
+
 		foreach ( $tables as $sql ) {
 			dbDelta( $sql );
 		}
 
 		self::ensure_trash_columns();
+		self::ensure_channel_columns();
+		self::ensure_stripe_columns();
+		self::ensure_payment_method_column();
+		self::ensure_payment_reference_columns();
 
 		update_option( 'shmpp_db_version', self::DB_VERSION );
+	}
+
+	/**
+	 * Ensure channel-related columns exist on bookings (upgrades from < 1.8.0).
+	 */
+	public static function ensure_channel_columns() {
+		global $wpdb;
+		$table = self::table( 'bookings' );
+		if ( ! $table ) {
+			return;
+		}
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( ! $exists ) {
+			return;
+		}
+
+		$columns = array(
+			'source'               => "ALTER TABLE %i ADD COLUMN source VARCHAR(50) NOT NULL DEFAULT 'direct' AFTER offline_payment_type_id, ADD KEY source (source)",
+			'external_id'          => 'ALTER TABLE %i ADD COLUMN external_id VARCHAR(191) NULL AFTER source, ADD KEY external_id (external_id)',
+			'external_revision_id' => 'ALTER TABLE %i ADD COLUMN external_revision_id VARCHAR(191) NULL AFTER external_id',
+			'channel_meta'         => 'ALTER TABLE %i ADD COLUMN channel_meta LONGTEXT NULL AFTER external_revision_id',
+		);
+
+		foreach ( $columns as $col => $sql ) {
+			$found = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, $col ) );
+			if ( empty( $found ) ) {
+				$wpdb->query( $wpdb->prepare( $sql, $table ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			}
+		}
+	}
+
+	/**
+	 * Ensure Stripe payment columns exist on bookings (upgrades from < 1.9.0).
+	 */
+	public static function ensure_stripe_columns() {
+		global $wpdb;
+		$table = self::table( 'bookings' );
+		if ( ! $table ) {
+			return;
+		}
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( ! $exists ) {
+			return;
+		}
+
+		$columns = array(
+			'stripe_session_id'        => 'ALTER TABLE %i ADD COLUMN stripe_session_id VARCHAR(191) NULL AFTER offline_payment_type_id, ADD KEY stripe_session_id (stripe_session_id)',
+			'stripe_payment_intent_id' => 'ALTER TABLE %i ADD COLUMN stripe_payment_intent_id VARCHAR(191) NULL AFTER stripe_session_id',
+		);
+
+		foreach ( $columns as $col => $sql ) {
+			$found = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, $col ) );
+			if ( empty( $found ) ) {
+				$wpdb->query( $wpdb->prepare( $sql, $table ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			}
+		}
+	}
+
+	/**
+	 * Ensure payment_method column exists on bookings (upgrades from < 1.10.0).
+	 */
+	public static function ensure_payment_method_column() {
+		global $wpdb;
+		$table = self::table( 'bookings' );
+		if ( ! $table ) {
+			return;
+		}
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( ! $exists ) {
+			return;
+		}
+
+		$found = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, 'payment_method' ) );
+		if ( empty( $found ) ) {
+			$wpdb->query(
+				$wpdb->prepare(
+					"ALTER TABLE %i ADD COLUMN payment_method VARCHAR(30) NOT NULL DEFAULT 'pay_at_hotel' AFTER payment_status",
+					$table
+				)
+			); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		}
+	}
+
+	/**
+	 * Ensure payment_reference columns exist (upgrades from < 1.11.0).
+	 */
+	public static function ensure_payment_reference_columns() {
+		global $wpdb;
+
+		$targets = array(
+			'bookings'                    => 'payment_method',
+			'room_bills'                  => 'offline_payment_type_id',
+			'restaurant_bills'            => 'offline_payment_type_id',
+			'non_border_restaurant_bills' => 'offline_payment_type_id',
+			'laundry_bills'               => 'offline_payment_type_id',
+			'damage_bills'                => 'offline_payment_type_id',
+			'employee_salaries'           => 'offline_payment_type_id',
+		);
+
+		foreach ( $targets as $suffix => $after_col ) {
+			$table = self::table( $suffix );
+			if ( ! $table ) {
+				continue;
+			}
+			$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+			if ( ! $exists ) {
+				continue;
+			}
+			$found = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, 'payment_reference' ) );
+			if ( empty( $found ) ) {
+				$wpdb->query(
+					$wpdb->prepare(
+						'ALTER TABLE %i ADD COLUMN payment_reference VARCHAR(191) NULL AFTER ' . $after_col, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+						$table
+					)
+				);
+			}
+		}
 	}
 
 	/**
