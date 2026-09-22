@@ -406,8 +406,10 @@ class ShmppRoomsController {
 		}
 
 		$room_table = ShmppDatabase::table( 'room_types' );
-		$slot_table = ShmppDatabase::table( 'booking_date_slots' );
-		$nights     = (int) ( ( strtotime( $check_out ) - strtotime( $check_in ) ) / DAY_IN_SECONDS );
+		$nights     = ShmppInventory::nights( $check_in, $check_out );
+		if ( $nights < 1 ) {
+			return new WP_Error( 'invalid_dates', 'Valid check-in and check-out dates are required', array( 'status' => 400 ) );
+		}
 
 		$types = $wpdb->get_results(
 			$wpdb->prepare( 'SELECT * FROM %i WHERE status = \'active\' AND deleted_at IS NULL AND max_adults >= %d AND max_children >= %d', $room_table, $adults,
@@ -418,46 +420,18 @@ class ShmppRoomsController {
 
 		$results = array();
 		foreach ( $types as $type ) {
-			$min_available = PHP_INT_MAX;
-			$total_price   = 0;
-			$date          = $check_in;
-			$ok            = true;
-
-			for ( $i = 0; $i < $nights; $i++ ) {
-				$slot = $wpdb->get_row(
-					$wpdb->prepare( 'SELECT * FROM %i WHERE room_type_id = %d AND slot_date = %s AND deleted_at IS NULL', $slot_table, $type['id'],
-						$date
-					),
-					ARRAY_A
-				);
-
-				$available = $slot
-					? max( 0, (int) $slot['available_rooms'] - (int) $slot['booked_rooms'] )
-					: (int) $type['total_rooms'];
-
-				$price = $slot && null !== $slot['price_override']
-					? (float) $slot['price_override']
-					: (float) $type['base_price'];
-
-				if ( $available < $rooms ) {
-					$ok = false;
-					break;
-				}
-
-				$min_available = min( $min_available, $available );
-				$total_price  += $price * $rooms;
-				$date          = gmdate( 'Y-m-d', strtotime( $date . ' +1 day' ) );
+			$quote = ShmppInventory::quote( (int) $type['id'], $check_in, $check_out, $rooms );
+			if ( is_wp_error( $quote ) || empty( $quote['available'] ) ) {
+				continue;
 			}
 
-			if ( $ok ) {
-				$type['amenities']       = $this->get_amenities( (int) $type['id'] );
-				$type['gallery']         = $this->get_gallery( (int) $type['id'] );
-				$type['nights']          = $nights;
-				$type['available_rooms'] = $min_available === PHP_INT_MAX ? (int) $type['total_rooms'] : $min_available;
-				$type['total_price']     = round( $total_price, 2 );
-				$type['price_per_night'] = $nights > 0 ? round( $total_price / $nights / $rooms, 2 ) : (float) $type['base_price'];
-				$results[]               = $type;
-			}
+			$type['amenities']       = $this->get_amenities( (int) $type['id'] );
+			$type['gallery']         = $this->get_gallery( (int) $type['id'] );
+			$type['nights']          = (int) $quote['nights'];
+			$type['available_rooms'] = (int) $quote['available_rooms'];
+			$type['total_price']     = (float) $quote['subtotal'];
+			$type['price_per_night'] = (float) $quote['price_per_night'];
+			$results[]               = $type;
 		}
 
 		return rest_ensure_response(

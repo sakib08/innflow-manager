@@ -273,8 +273,28 @@ class ShmppTrash {
 			}
 		}
 
+		// Take the rooms back before the stay becomes active again.
+		if ( 'bookings' === $type && ! empty( $row['check_in'] ) && ! empty( $row['check_out'] ) ) {
+			$status = isset( $row['booking_status'] ) ? $row['booking_status'] : '';
+			if ( 'cancelled' !== $status ) {
+				$held = ShmppInventory::hold(
+					(int) $row['room_type_id'],
+					$row['check_in'],
+					$row['check_out'],
+					isset( $row['rooms_count'] ) ? (int) $row['rooms_count'] : 1
+				);
+				if ( is_wp_error( $held ) ) {
+					return $held;
+				}
+			}
+		}
+
 		// wpdb->update skips nulls — clear deleted_at with an explicit prepared query.
 		self::restore_row( $table, $id, $unique_field, $unique_value );
+
+		if ( 'bookings' === $type && ! empty( $row['check_in'] ) && ! empty( $row['check_out'] ) ) {
+			do_action( 'shmpp_booking_inventory_changed', (int) $row['room_type_id'], $row['check_in'], $row['check_out'] );
+		}
 
 		if ( 'bookings' === $type ) {
 			$check = ShmppDatabase::table( 'guest_checkin_checkout' );

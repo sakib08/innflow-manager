@@ -223,13 +223,33 @@ class ShmppBookingsController {
 		}
 
 		$rooms_table = ShmppDatabase::table( 'room_types' );
-		$room        = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $rooms_table, $room_type_id ), ARRAY_A );
+		$room        = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d AND deleted_at IS NULL', $rooms_table, $room_type_id ), ARRAY_A );
 		if ( ! $room ) {
 			return new WP_Error( 'not_found', 'Room type not found', array( 'status' => 404 ) );
 		}
 
-		$nights   = (int) ( ( strtotime( $check_out ) - strtotime( $check_in ) ) / DAY_IN_SECONDS );
-		$subtotal = (float) $room['base_price'] * $nights * $rooms_count;
+		$payment_method = sanitize_text_field( $request->get_param( 'payment_method' ) ?: 'pay_at_hotel' );
+		if ( ! in_array( $payment_method, array( 'pay_at_hotel', 'stripe', 'manual' ), true ) ) {
+			$payment_method = 'pay_at_hotel';
+		}
+		$payment_status    = sanitize_text_field( $request->get_param( 'payment_status' ) ?: 'pending' );
+		$payment_reference = sanitize_text_field( $request->get_param( 'payment_reference' ) );
+		if ( 'paid' === $payment_status && '' === $payment_reference ) {
+			return new WP_Error(
+				'payment_reference_required',
+				'A payment reference number is required when marking a booking as paid (cheque number, card transaction ID, transfer reference, etc.).',
+				array( 'status' => 400 )
+			);
+		}
+
+		// Same quote room search shows: per-night overrides, closed dates, and remaining rooms.
+		$held = ShmppInventory::hold( $room_type_id, $check_in, $check_out, $rooms_count );
+		if ( is_wp_error( $held ) ) {
+			return $held;
+		}
+
+		$nights   = (int) $held['nights'];
+		$subtotal = (float) $held['subtotal'];
 
 		$settings   = get_option( 'shmpp_settings', array() );
 		$tax_rate   = isset( $settings['tax_rate'] ) ? (float) $settings['tax_rate'] : 0;
@@ -255,21 +275,12 @@ class ShmppBookingsController {
 
 		$wpdb->insert( ShmppDatabase::table( 'guests' ), $guest_data );
 		$guest_id = (int) $wpdb->insert_id;
+		if ( ! $guest_id ) {
+			ShmppInventory::release( $room_type_id, $check_in, $check_out, $rooms_count );
+			return new WP_Error( 'create_failed', 'Could not create booking.', array( 'status' => 500 ) );
+		}
 
 		$booking_code = 'SHM-' . strtoupper( wp_generate_password( 8, false, false ) );
-		$payment_method = sanitize_text_field( $request->get_param( 'payment_method' ) ?: 'pay_at_hotel' );
-		if ( ! in_array( $payment_method, array( 'pay_at_hotel', 'stripe', 'manual' ), true ) ) {
-			$payment_method = 'pay_at_hotel';
-		}
-		$payment_status    = sanitize_text_field( $request->get_param( 'payment_status' ) ?: 'pending' );
-		$payment_reference = sanitize_text_field( $request->get_param( 'payment_reference' ) );
-		if ( 'paid' === $payment_status && '' === $payment_reference ) {
-			return new WP_Error(
-				'payment_reference_required',
-				'A payment reference number is required when marking a booking as paid (cheque number, card transaction ID, transfer reference, etc.).',
-				array( 'status' => 400 )
-			);
-		}
 		$booking_data = array(
 			'booking_code'            => $booking_code,
 			'guest_id'                => $guest_id,
@@ -299,6 +310,10 @@ class ShmppBookingsController {
 
 		$wpdb->insert( ShmppDatabase::table( 'bookings' ), $booking_data );
 		$booking_id = (int) $wpdb->insert_id;
+		if ( ! $booking_id ) {
+			ShmppInventory::release( $room_type_id, $check_in, $check_out, $rooms_count );
+			return new WP_Error( 'create_failed', 'Could not create booking.', array( 'status' => 500 ) );
+		}
 
 		$wpdb->insert(
 			ShmppDatabase::table( 'guest_checkin_checkout' ),
@@ -323,7 +338,6 @@ class ShmppBookingsController {
 			)
 		);
 
-		ShmppInventory::reserve( $room_type_id, $check_in, $check_out, $rooms_count );
 		do_action( 'shmpp_booking_inventory_changed', $room_type_id, $check_in, $check_out );
 
 		if ( $discount_id ) {

@@ -1,10 +1,10 @@
 === StayNexus Hotel Manager ===
 Contributors: sakibbd08
-Tags: hotel, booking, reservations, hospitality, rooms
+Tags: hotel booking, hotel reservation, property management, channel manager, stripe
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.1
+Stable tag: 1.1.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -111,6 +111,12 @@ When Channels is configured and active, StayNexus sends mapped room availability
 
 == Changelog ==
 
+= 1.1.2 =
+* Guest checkout charges the same per-night quote shown in room search, including date price overrides.
+* Bookings are refused when a night is closed or does not have enough rooms left.
+* Trashing a booking releases those nights; restoring it reserves them again.
+* Slot availability lookup uses literal prepared statements, including the row lock.
+
 = 1.1.1 =
 * Removed accidental junk files with invalid names from the plugin root.
 * Hardened channel sync log prune queries with `$wpdb->prepare()` and `%i` placeholders.
@@ -143,6 +149,9 @@ Initial release of StayNexus Hotel Manager.
 * Initial release.
 
 == Upgrade Notice ==
+
+= 1.1.2 =
+Checkout now uses the room-search quote, and closed or full dates can no longer be booked.
 
 = 1.1.1 =
 Plugin Check cleanup: invalid filenames removed and channel sync log SQL prepared.
