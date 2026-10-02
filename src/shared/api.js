@@ -36,6 +36,7 @@ function readRootConfig() {
     apiUrl: el.dataset.apiUrl,
     nonce: el.dataset.nonce || '',
     title: el.dataset.title || '',
+    defaultLanguage: el.dataset.defaultLanguage || (settings && settings.frontend_language) || 'en',
     settings,
     stripe,
     manualPayment,

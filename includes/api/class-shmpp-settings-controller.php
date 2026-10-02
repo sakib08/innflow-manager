@@ -95,6 +95,7 @@ class ShmppSettingsController {
 			'manual_payment_title',
 			'manual_payment_instructions',
 			'frontend_primary_color',
+			'frontend_language',
 		);
 
 		foreach ( $allowed as $key ) {
@@ -111,6 +112,10 @@ class ShmppSettingsController {
 			} elseif ( 'frontend_primary_color' === $key ) {
 				$hex = ShmppColors::sanitize_hex( $value );
 				$current[ $key ] = $hex ? $hex : ShmppColors::DEFAULT_PRIMARY;
+			} elseif ( 'frontend_language' === $key ) {
+				$lang = sanitize_key( $value );
+				$allowed_langs = array( 'en', 'es', 'fr', 'de', 'bn', 'ar' );
+				$current[ $key ] = in_array( $lang, $allowed_langs, true ) ? $lang : 'en';
 			} else {
 				$current[ $key ] = sanitize_text_field( $value );
 			}

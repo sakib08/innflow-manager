@@ -51,6 +51,21 @@ export default function SettingsPage() {
           <Input label="Phone" value={form.phone || ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           <Input label="Email" value={form.email || ''} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <Input label="Address" value={form.address || ''} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+          <Select
+            label="Default frontend language"
+            value={form.frontend_language || 'en'}
+            onChange={(e) => setForm({ ...form, frontend_language: e.target.value })}
+          >
+            <option value="en">English</option>
+            <option value="es">Español (Spanish)</option>
+            <option value="fr">Français (French)</option>
+            <option value="de">Deutsch (German)</option>
+            <option value="bn">বাংলা (Bengali)</option>
+            <option value="ar">العربية (Arabic)</option>
+          </Select>
+          <p className="-mt-1 text-xs text-brand-500">
+            Guests can still switch language on the booking form; this is the default when they first visit.
+          </p>
           <div>
             <label className="mb-1 block text-sm font-medium text-brand-800">Frontend primary color</label>
             <div className="flex flex-wrap items-center gap-3">

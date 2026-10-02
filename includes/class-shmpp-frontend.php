@@ -105,13 +105,20 @@ class ShmppFrontend {
 			? $settings['manual_payment_title']
 			: __( 'Bank transfer / Manual payment', 'staynexus-hotel-manager' );
 
+		$default_language = isset( $settings['frontend_language'] ) ? sanitize_key( $settings['frontend_language'] ) : 'en';
+		$allowed_langs    = array( 'en', 'es', 'fr', 'de', 'bn', 'ar' );
+		if ( ! in_array( $default_language, $allowed_langs, true ) ) {
+			$default_language = 'en';
+		}
+
 		return array(
-			'apiUrl'   => esc_url_raw( rest_url( 'staynexushm/v1' ) ),
-			'nonce'    => wp_create_nonce( 'wp_rest' ),
-			'title'    => $title ? $title : __( 'Find Your Stay', 'staynexus-hotel-manager' ),
-			'settings' => $public_settings,
-			'stripe'   => ShmppStripe::get_public_config(),
-			'manualPayment' => array(
+			'apiUrl'          => esc_url_raw( rest_url( 'staynexushm/v1' ) ),
+			'nonce'           => wp_create_nonce( 'wp_rest' ),
+			'title'           => $title ? $title : __( 'Find Your Stay', 'staynexus-hotel-manager' ),
+			'defaultLanguage' => $default_language,
+			'settings'        => $public_settings,
+			'stripe'          => ShmppStripe::get_public_config(),
+			'manualPayment'   => array(
 				'enabled'      => ! empty( $settings['manual_payment_enabled'] ),
 				'title'        => $manual_title,
 				'instructions' => isset( $settings['manual_payment_instructions'] ) ? (string) $settings['manual_payment_instructions'] : '',
@@ -180,11 +187,12 @@ class ShmppFrontend {
 		$theme_style = $this->frontend_theme_style_attr( $config['settings'] );
 
 		return sprintf(
-			'<div id="shmpp-frontend-root" class="shmpp-frontend-app shmpp-root"%s data-api-url="%s" data-nonce="%s" data-title="%s" data-settings="%s" data-stripe="%s" data-manual-payment="%s"></div>',
+			'<div id="shmpp-frontend-root" class="shmpp-frontend-app shmpp-root"%s data-api-url="%s" data-nonce="%s" data-title="%s" data-default-language="%s" data-settings="%s" data-stripe="%s" data-manual-payment="%s"></div>',
 			$theme_style ? ' style="' . esc_attr( $theme_style ) . '"' : '',
 			esc_url( $config['apiUrl'] ),
 			esc_attr( $config['nonce'] ),
 			esc_attr( $config['title'] ),
+			esc_attr( $config['defaultLanguage'] ),
 			esc_attr( wp_json_encode( $config['settings'] ) ),
 			esc_attr( wp_json_encode( $config['stripe'] ) ),
 			esc_attr( wp_json_encode( $config['manualPayment'] ) )
