@@ -1,12 +1,11 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted InnflowManagerDatabase::table() keys.
-// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
-class InnflowManagerAmenities_Controller {
+class ShmppAmenitiesController {
 
-	const NS = 'innflow-manager/v1';
+	const NS = 'staynexushm/v1';
 
 	public function register_routes() {
 		register_rest_route(
@@ -16,12 +15,12 @@ class InnflowManagerAmenities_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_amenities' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_public' ),
+					'permission_callback' => '__return_true',
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_amenity' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -32,15 +31,16 @@ class InnflowManagerAmenities_Controller {
 			array(
 				'methods'             => WP_REST_Server::DELETABLE,
 				'callback'            => array( $this, 'delete_amenity' ),
-				'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+				'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 			)
 		);
 	}
 
 	public function list_amenities() {
 		global $wpdb;
-		$rows = $wpdb->get_results(
-			'SELECT * FROM ' . InnflowManagerDatabase::table( 'amenities' ) . ' WHERE ' . InnflowManagerTrash::alive_sql() . ' ORDER BY name ASC',
+		$table = ShmppDatabase::table( 'amenities' );
+		$rows  = $wpdb->get_results(
+			$wpdb->prepare( 'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d ORDER BY name ASC', $table, 1 ),
 			ARRAY_A
 		);
 		return rest_ensure_response( $rows );
@@ -49,7 +49,7 @@ class InnflowManagerAmenities_Controller {
 	public function create_amenity( $request ) {
 		global $wpdb;
 		$wpdb->insert(
-			InnflowManagerDatabase::table( 'amenities' ),
+			ShmppDatabase::table( 'amenities' ),
 			array(
 				'name'        => sanitize_text_field( $request->get_param( 'name' ) ),
 				'icon'        => sanitize_text_field( $request->get_param( 'icon' ) ),
@@ -60,7 +60,7 @@ class InnflowManagerAmenities_Controller {
 	}
 
 	public function delete_amenity( $request ) {
-		$result = InnflowManagerTrash::trash( 'amenities', (int) $request['id'] );
+		$result = ShmppTrash::trash( 'amenities', (int) $request['id'] );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}

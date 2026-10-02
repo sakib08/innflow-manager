@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
- * Build production assets and create a distributable plugin ZIP.
+ * Build production assets and create a WordPress.org–ready plugin ZIP.
  *
  * Usage:
  *   npm run plugin-zip
- *   node scripts/package-plugin.mjs
  *   node scripts/package-plugin.mjs --skip-build
+ *
+ * ZIP is written to ../staynexus-hotel-manager-builds/ (outside the plugin folder).
+ * Source for minified JS/CSS is published at the GitHub URL in readme.txt.
  */
 import { spawnSync } from 'child_process';
 import fs from 'fs';
@@ -14,12 +16,12 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname( fileURLToPath( import.meta.url ) );
 const root = path.resolve( __dirname, '..' );
-const pluginSlug = 'innflow-manager';
+const pluginSlug = 'staynexus-hotel-manager';
 const skipBuild = process.argv.includes( '--skip-build' );
 
 function readVersion() {
 	const pkg = JSON.parse( fs.readFileSync( path.join( root, 'package.json' ), 'utf8' ) );
-	const main = fs.readFileSync( path.join( root, 'innflow-manager.php' ), 'utf8' );
+	const main = fs.readFileSync( path.join( root, 'staynexus-hotel-manager.php' ), 'utf8' );
 	const match = main.match( /^\s*\*\s*Version:\s*([^\s]+)/m );
 	const phpVersion = match ? match[1].trim() : null;
 	if ( phpVersion && phpVersion !== pkg.version ) {
@@ -49,8 +51,8 @@ function ensureZipAvailable() {
 }
 
 const version = readVersion();
-const outDir = path.join( root, 'dist' );
-const zipName = `${pluginSlug}-${version}.zip`;
+const outDir = path.resolve( root, '..', 'staynexus-hotel-manager-builds' );
+const zipName = `${pluginSlug}.zip`;
 const zipPath = path.join( outDir, zipName );
 const stagingRoot = path.join( outDir, '_staging' );
 const stagingPlugin = path.join( stagingRoot, pluginSlug );
@@ -84,11 +86,10 @@ fs.rmSync( stagingRoot, { recursive: true, force: true } );
 fs.mkdirSync( stagingPlugin, { recursive: true } );
 fs.mkdirSync( outDir, { recursive: true } );
 
+// Production plugin only. JS/CSS source is linked from readme.txt (== Source code ==).
 const includePaths = [
-	'innflow-manager.php',
-	'hotel-booking.php',
+	'staynexus-hotel-manager.php',
 	'readme.txt',
-	'README.md',
 	'includes',
 	'assets/dist',
 ];
@@ -110,6 +111,11 @@ if ( fs.existsSync( zipPath ) ) {
 run( 'zip', [ '-r', '-q', zipPath, pluginSlug ], { cwd: stagingRoot } );
 fs.rmSync( stagingRoot, { recursive: true, force: true } );
 
+const legacyDist = path.join( root, 'dist' );
+if ( fs.existsSync( legacyDist ) ) {
+	fs.rmSync( legacyDist, { recursive: true, force: true } );
+}
+
 const sizeKb = Math.round( fs.statSync( zipPath ).size / 1024 );
-console.log( `Created ${path.relative( root, zipPath )} (${sizeKb} KB)` );
-console.log( 'Install by uploading this ZIP in WordPress → Plugins → Add New → Upload Plugin.' );
+console.log( `Created ${zipPath} (${sizeKb} KB)` );
+console.log( 'Upload this ZIP to WordPress.org SVN tags/ or via Plugins → Upload Plugin.' );

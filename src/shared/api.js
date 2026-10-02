@@ -1,6 +1,6 @@
 function readRootConfig() {
   if (typeof document === 'undefined') return null;
-  const el = document.getElementById('ifmpp-frontend-root') || document.getElementById('ifmpp-admin-root');
+  const el = document.getElementById('shmpp-frontend-root') || document.getElementById('shmpp-admin-root');
   if (!el || !el.dataset) return null;
 
   let settings = {};
@@ -12,20 +12,41 @@ function readRootConfig() {
     }
   }
 
+  let stripe = {};
+  if (el.dataset.stripe) {
+    try {
+      stripe = JSON.parse(el.dataset.stripe);
+    } catch {
+      stripe = {};
+    }
+  }
+
+  let manualPayment = {};
+  if (el.dataset.manualPayment) {
+    try {
+      manualPayment = JSON.parse(el.dataset.manualPayment);
+    } catch {
+      manualPayment = {};
+    }
+  }
+
   if (!el.dataset.apiUrl) return null;
 
   return {
     apiUrl: el.dataset.apiUrl,
     nonce: el.dataset.nonce || '',
     title: el.dataset.title || '',
+    defaultLanguage: el.dataset.defaultLanguage || (settings && settings.frontend_language) || 'en',
     settings,
+    stripe,
+    manualPayment,
   };
 }
 
 function fallbackConfig() {
   if (typeof window === 'undefined' || !window.location) return {};
   return {
-    apiUrl: `${window.location.origin}/wp-json/innflow-manager/v1`,
+    apiUrl: `${window.location.origin}/wp-json/staynexushm/v1`,
     nonce: '',
     settings: {},
   };
@@ -33,19 +54,19 @@ function fallbackConfig() {
 
 const API = () => {
   if (typeof window === 'undefined') return {};
-  if (window.ifmppAdmin && window.ifmppAdmin.apiUrl) return window.ifmppAdmin;
-  if (window.ifmppFrontend && window.ifmppFrontend.apiUrl) return window.ifmppFrontend;
+  if (window.shmppAdmin && window.shmppAdmin.apiUrl) return window.shmppAdmin;
+  if (window.shmppFrontend && window.shmppFrontend.apiUrl) return window.shmppFrontend;
   const fromDom = readRootConfig();
   if (fromDom) {
     // Cache onto window so later calls are cheap / consistent.
-    window.ifmppFrontend = { ...(window.ifmppFrontend || {}), ...fromDom };
-    return window.ifmppFrontend;
+    window.shmppFrontend = { ...(window.shmppFrontend || {}), ...fromDom };
+    return window.shmppFrontend;
   }
   return fallbackConfig();
 };
 
 function isAdminContext() {
-  return typeof window !== 'undefined' && !!window.ifmppAdmin;
+  return typeof window !== 'undefined' && !!window.shmppAdmin;
 }
 
 function localISODate(date = new Date()) {
@@ -166,15 +187,18 @@ export function money(amount, settings = {}) {
 
 export function pageFromSlug(slug) {
   const map = {
-    'innflow-manager': 'dashboard',
-    'innflow-manager-rooms': 'rooms',
-    'innflow-manager-bookings': 'bookings',
-    'innflow-manager-guests': 'guests',
-    'innflow-manager-billing': 'billing',
-    'innflow-manager-staff': 'staff',
-    'innflow-manager-restaurants': 'restaurants',
-    'innflow-manager-trash': 'trash',
-    'innflow-manager-settings': 'settings',
+    'staynexus-hotel-manager': 'dashboard',
+    'staynexus-hotel-manager-rooms': 'rooms',
+    'staynexus-hotel-manager-bookings': 'bookings',
+    'staynexus-hotel-manager-guests': 'guests',
+    'staynexus-hotel-manager-billing': 'billing',
+    'staynexus-hotel-manager-staff': 'staff',
+    'staynexus-hotel-manager-restaurants': 'restaurants',
+    'staynexus-hotel-manager-channels': 'channels',
+    'staynexus-hotel-manager-channel-help': 'channel-help',
+    'staynexus-hotel-manager-trash': 'trash',
+    'staynexus-hotel-manager-payments': 'payments',
+    'staynexus-hotel-manager-settings': 'settings',
   };
   return map[slug] || 'dashboard';
 }

@@ -3,12 +3,11 @@ defined( 'ABSPATH' ) || exit;
 
 // phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_fopen,WordPress.WP.AlternativeFunctions.file_system_operations_fwrite,WordPress.WP.AlternativeFunctions.file_system_operations_fread,WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- CSV stream to php://output and reading uploaded tmp files.
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted InnflowManagerDatabase::table() keys.
-// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
-class InnflowManagerRooms_Controller {
+class ShmppRoomsController {
 
-	const NS = 'innflow-manager/v1';
+	const NS = 'staynexushm/v1';
 
 	public function register_routes() {
 		register_rest_route(
@@ -18,12 +17,12 @@ class InnflowManagerRooms_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_rooms' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_public' ),
+					'permission_callback' => '__return_true',
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_room' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -35,7 +34,7 @@ class InnflowManagerRooms_Controller {
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'search_rooms' ),
-				'permission_callback' => array( 'InnflowManagerRest_API', 'permission_public' ),
+				'permission_callback' => '__return_true',
 			)
 		);
 
@@ -55,7 +54,7 @@ class InnflowManagerRooms_Controller {
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'import_rooms' ),
-				'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+				'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 			)
 		);
 
@@ -66,12 +65,12 @@ class InnflowManagerRooms_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'get_export_token' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'regenerate_export_token' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -83,17 +82,17 @@ class InnflowManagerRooms_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'get_room' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_public' ),
+					'permission_callback' => '__return_true',
 				),
 				array(
 					'methods'             => WP_REST_Server::EDITABLE,
 					'callback'            => array( $this, 'update_room' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::DELETABLE,
 					'callback'            => array( $this, 'delete_room' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -105,12 +104,12 @@ class InnflowManagerRooms_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_slots' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'upsert_slot' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -118,8 +117,11 @@ class InnflowManagerRooms_Controller {
 
 	public function list_rooms( $request ) {
 		global $wpdb;
-		$table = InnflowManagerDatabase::table( 'room_types' );
-		$rows  = $wpdb->get_results( "SELECT * FROM {$table} WHERE " . InnflowManagerTrash::alive_sql() . ' ORDER BY id DESC', ARRAY_A );
+		$table = ShmppDatabase::table( 'room_types' );
+		$rows  = $wpdb->get_results(
+			$wpdb->prepare( 'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d ORDER BY id DESC', $table, 1 ),
+			ARRAY_A
+		);
 		foreach ( $rows as &$row ) {
 			$row['amenities'] = $this->get_amenities( (int) $row['id'] );
 			$row['gallery']   = $this->get_gallery( (int) $row['id'] );
@@ -134,8 +136,8 @@ class InnflowManagerRooms_Controller {
 			$attrs = $request->get_attributes();
 			$id    = isset( $attrs['id'] ) ? (int) $attrs['id'] : 0;
 		}
-		$table = InnflowManagerDatabase::table( 'room_types' );
-		$row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d AND " . InnflowManagerTrash::alive_sql(), $id ), ARRAY_A );
+		$table = ShmppDatabase::table( 'room_types' );
+		$row   = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d AND deleted_at IS NULL', $table, $id ), ARRAY_A );
 		if ( ! $row ) {
 			return new WP_Error( 'not_found', 'Room type not found', array( 'status' => 404 ) );
 		}
@@ -148,7 +150,7 @@ class InnflowManagerRooms_Controller {
 		global $wpdb;
 		$data = $this->sanitize_room( $request );
 		$data['slug'] = $this->unique_slug( sanitize_title( $data['name'] ) );
-		$wpdb->insert( InnflowManagerDatabase::table( 'room_types' ), $data );
+		$wpdb->insert( ShmppDatabase::table( 'room_types' ), $data );
 		$id = (int) $wpdb->insert_id;
 		$this->sync_amenities( $id, $request->get_param( 'amenity_ids' ) );
 		$this->sync_gallery( $id, $request->get_param( 'gallery_urls' ) );
@@ -162,7 +164,7 @@ class InnflowManagerRooms_Controller {
 		global $wpdb;
 		$id = (int) $request['id'];
 		$data = $this->sanitize_room( $request );
-		$wpdb->update( InnflowManagerDatabase::table( 'room_types' ), $data, array( 'id' => $id ) );
+		$wpdb->update( ShmppDatabase::table( 'room_types' ), $data, array( 'id' => $id ) );
 		$this->sync_amenities( $id, $request->get_param( 'amenity_ids' ) );
 		if ( null !== $request->get_param( 'gallery_urls' ) ) {
 			$this->sync_gallery( $id, $request->get_param( 'gallery_urls' ) );
@@ -171,7 +173,7 @@ class InnflowManagerRooms_Controller {
 	}
 
 	public function delete_room( $request ) {
-		$result = InnflowManagerTrash::trash( 'rooms', (int) $request['id'] );
+		$result = ShmppTrash::trash( 'rooms', (int) $request['id'] );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
@@ -183,15 +185,15 @@ class InnflowManagerRooms_Controller {
 			return true;
 		}
 		$token  = sanitize_text_field( $request->get_param( 'token' ) );
-		$stored = get_option( 'ifmpp_export_token' );
+		$stored = get_option( 'shmpp_export_token' );
 		return $token && $stored && hash_equals( (string) $stored, $token );
 	}
 
 	public function get_export_token() {
-		$token = get_option( 'ifmpp_export_token' );
+		$token = get_option( 'shmpp_export_token' );
 		if ( ! $token ) {
 			$token = wp_generate_password( 32, false, false );
-			update_option( 'ifmpp_export_token', $token );
+			update_option( 'shmpp_export_token', $token );
 		}
 		return rest_ensure_response(
 			array(
@@ -209,15 +211,18 @@ class InnflowManagerRooms_Controller {
 
 	public function regenerate_export_token() {
 		$token = wp_generate_password( 32, false, false );
-		update_option( 'ifmpp_export_token', $token );
+		update_option( 'shmpp_export_token', $token );
 		return $this->get_export_token();
 	}
 
 	public function export_rooms( $request ) {
 		global $wpdb;
 		$format = sanitize_text_field( $request->get_param( 'format' ) ?: 'csv' );
-		$table  = InnflowManagerDatabase::table( 'room_types' );
-		$rooms  = $wpdb->get_results( "SELECT * FROM {$table} ORDER BY id ASC", ARRAY_A );
+		$table = ShmppDatabase::table( 'room_types' );
+		$rooms = $wpdb->get_results(
+			$wpdb->prepare( 'SELECT * FROM %i WHERE 1 = %d ORDER BY id ASC', $table, 1 ),
+			ARRAY_A
+		);
 
 		$columns = array( 'id', 'name', 'slug', 'description', 'base_price', 'max_adults', 'max_children', 'total_rooms', 'image_url', 'gallery_urls', 'amenities', 'status' );
 
@@ -241,8 +246,8 @@ class InnflowManagerRooms_Controller {
 			);
 		}
 
-		if ( 'xlsx' === $format && InnflowManagerXlsx_Writer::is_available() ) {
-			$writer = new InnflowManagerXlsx_Writer();
+		if ( 'xlsx' === $format && ShmppXlsxWriter::is_available() ) {
+			$writer = new ShmppXlsxWriter();
 			$writer->add_row( $columns );
 			foreach ( $data_rows as $row ) {
 				$writer->add_row( $row );
@@ -297,7 +302,7 @@ class InnflowManagerRooms_Controller {
 		);
 
 		global $wpdb;
-		$rooms_table = InnflowManagerDatabase::table( 'room_types' );
+		$rooms_table = ShmppDatabase::table( 'room_types' );
 
 		$created = 0;
 		$updated = 0;
@@ -335,10 +340,10 @@ class InnflowManagerRooms_Controller {
 			);
 
 			$id       = isset( $assoc['id'] ) ? (int) $assoc['id'] : 0;
-			$existing = $id ? $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$rooms_table} WHERE id = %d", $id ) ) : null;
+			$existing = $id ? $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM %i WHERE id = %d', $rooms_table, $id ) ) : null;
 
 			if ( ! $existing && ! empty( $assoc['slug'] ) ) {
-				$existing = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$rooms_table} WHERE slug = %s", sanitize_title( $assoc['slug'] ) ) );
+				$existing = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM %i WHERE slug = %s', $rooms_table, sanitize_title( $assoc['slug'] ) ) );
 			}
 
 			if ( $existing ) {
@@ -378,9 +383,9 @@ class InnflowManagerRooms_Controller {
 
 	private function find_or_create_amenity( $name ) {
 		global $wpdb;
-		$table = InnflowManagerDatabase::table( 'amenities' );
+		$table = ShmppDatabase::table( 'amenities' );
 		$name  = sanitize_text_field( $name );
-		$id    = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE name = %s", $name ) );
+		$id    = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM %i WHERE name = %s', $table, $name ) );
 		if ( $id ) {
 			return (int) $id;
 		}
@@ -400,14 +405,14 @@ class InnflowManagerRooms_Controller {
 			return new WP_Error( 'invalid_dates', 'Valid check-in and check-out dates are required', array( 'status' => 400 ) );
 		}
 
-		$room_table = InnflowManagerDatabase::table( 'room_types' );
-		$slot_table = InnflowManagerDatabase::table( 'booking_date_slots' );
-		$nights     = (int) ( ( strtotime( $check_out ) - strtotime( $check_in ) ) / DAY_IN_SECONDS );
+		$room_table = ShmppDatabase::table( 'room_types' );
+		$nights     = ShmppInventory::nights( $check_in, $check_out );
+		if ( $nights < 1 ) {
+			return new WP_Error( 'invalid_dates', 'Valid check-in and check-out dates are required', array( 'status' => 400 ) );
+		}
 
 		$types = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT * FROM {$room_table} WHERE status = 'active' AND " . InnflowManagerTrash::alive_sql() . ' AND max_adults >= %d AND max_children >= %d',
-				$adults,
+			$wpdb->prepare( 'SELECT * FROM %i WHERE status = \'active\' AND deleted_at IS NULL AND max_adults >= %d AND max_children >= %d', $room_table, $adults,
 				$children
 			),
 			ARRAY_A
@@ -415,48 +420,18 @@ class InnflowManagerRooms_Controller {
 
 		$results = array();
 		foreach ( $types as $type ) {
-			$min_available = PHP_INT_MAX;
-			$total_price   = 0;
-			$date          = $check_in;
-			$ok            = true;
-
-			for ( $i = 0; $i < $nights; $i++ ) {
-				$slot = $wpdb->get_row(
-					$wpdb->prepare(
-						"SELECT * FROM {$slot_table} WHERE room_type_id = %d AND slot_date = %s AND " . InnflowManagerTrash::alive_sql(),
-						$type['id'],
-						$date
-					),
-					ARRAY_A
-				);
-
-				$available = $slot
-					? max( 0, (int) $slot['available_rooms'] - (int) $slot['booked_rooms'] )
-					: (int) $type['total_rooms'];
-
-				$price = $slot && null !== $slot['price_override']
-					? (float) $slot['price_override']
-					: (float) $type['base_price'];
-
-				if ( $available < $rooms ) {
-					$ok = false;
-					break;
-				}
-
-				$min_available = min( $min_available, $available );
-				$total_price  += $price * $rooms;
-				$date          = gmdate( 'Y-m-d', strtotime( $date . ' +1 day' ) );
+			$quote = ShmppInventory::quote( (int) $type['id'], $check_in, $check_out, $rooms );
+			if ( is_wp_error( $quote ) || empty( $quote['available'] ) ) {
+				continue;
 			}
 
-			if ( $ok ) {
-				$type['amenities']       = $this->get_amenities( (int) $type['id'] );
-				$type['gallery']         = $this->get_gallery( (int) $type['id'] );
-				$type['nights']          = $nights;
-				$type['available_rooms'] = $min_available === PHP_INT_MAX ? (int) $type['total_rooms'] : $min_available;
-				$type['total_price']     = round( $total_price, 2 );
-				$type['price_per_night'] = $nights > 0 ? round( $total_price / $nights / $rooms, 2 ) : (float) $type['base_price'];
-				$results[]               = $type;
-			}
+			$type['amenities']       = $this->get_amenities( (int) $type['id'] );
+			$type['gallery']         = $this->get_gallery( (int) $type['id'] );
+			$type['nights']          = (int) $quote['nights'];
+			$type['available_rooms'] = (int) $quote['available_rooms'];
+			$type['total_price']     = (float) $quote['subtotal'];
+			$type['price_per_night'] = (float) $quote['price_per_night'];
+			$results[]               = $type;
 		}
 
 		return rest_ensure_response(
@@ -474,34 +449,100 @@ class InnflowManagerRooms_Controller {
 		$room_type_id = (int) $request->get_param( 'room_type_id' );
 		$from         = sanitize_text_field( $request->get_param( 'from' ) );
 		$to           = sanitize_text_field( $request->get_param( 'to' ) );
-		$table        = InnflowManagerDatabase::table( 'booking_date_slots' );
+		$table        = ShmppDatabase::table( 'booking_date_slots' );
 
-		$sql    = "SELECT * FROM {$table} WHERE " . InnflowManagerTrash::alive_sql();
-		$params = array();
-		if ( $room_type_id ) {
-			$sql     .= ' AND room_type_id = %d';
-			$params[] = $room_type_id;
+		if ( $room_type_id && $from && $to ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d AND room_type_id = %d AND slot_date >= %s AND slot_date <= %s ORDER BY slot_date ASC',
+					$table,
+					1,
+					$room_type_id,
+					$from,
+					$to
+				),
+				ARRAY_A
+			);
+		} elseif ( $room_type_id && $from ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d AND room_type_id = %d AND slot_date >= %s ORDER BY slot_date ASC',
+					$table,
+					1,
+					$room_type_id,
+					$from
+				),
+				ARRAY_A
+			);
+		} elseif ( $room_type_id && $to ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d AND room_type_id = %d AND slot_date <= %s ORDER BY slot_date ASC',
+					$table,
+					1,
+					$room_type_id,
+					$to
+				),
+				ARRAY_A
+			);
+		} elseif ( $room_type_id ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d AND room_type_id = %d ORDER BY slot_date ASC',
+					$table,
+					1,
+					$room_type_id
+				),
+				ARRAY_A
+			);
+		} elseif ( $from && $to ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d AND slot_date >= %s AND slot_date <= %s ORDER BY slot_date ASC',
+					$table,
+					1,
+					$from,
+					$to
+				),
+				ARRAY_A
+			);
+		} elseif ( $from ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d AND slot_date >= %s ORDER BY slot_date ASC',
+					$table,
+					1,
+					$from
+				),
+				ARRAY_A
+			);
+		} elseif ( $to ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d AND slot_date <= %s ORDER BY slot_date ASC',
+					$table,
+					1,
+					$to
+				),
+				ARRAY_A
+			);
+		} else {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d ORDER BY slot_date ASC',
+					$table,
+					1
+				),
+				ARRAY_A
+			);
 		}
-		if ( $from ) {
-			$sql     .= ' AND slot_date >= %s';
-			$params[] = $from;
-		}
-		if ( $to ) {
-			$sql     .= ' AND slot_date <= %s';
-			$params[] = $to;
-		}
-		$sql .= ' ORDER BY slot_date ASC';
-
-		$rows = $params
-			? $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A )
-			: $wpdb->get_results( $sql, ARRAY_A );
 
 		return rest_ensure_response( $rows );
 	}
 
 	public function upsert_slot( $request ) {
 		global $wpdb;
-		$table = InnflowManagerDatabase::table( 'booking_date_slots' );
+		$table = ShmppDatabase::table( 'booking_date_slots' );
 		$data  = array(
 			'room_type_id'    => (int) $request->get_param( 'room_type_id' ),
 			'slot_date'       => sanitize_text_field( $request->get_param( 'slot_date' ) ),
@@ -514,9 +555,7 @@ class InnflowManagerRooms_Controller {
 		);
 
 		$existing = $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT id FROM {$table} WHERE room_type_id = %d AND slot_date = %s",
-				$data['room_type_id'],
+			$wpdb->prepare( 'SELECT id FROM %i WHERE room_type_id = %d AND slot_date = %s', $table, $data['room_type_id'],
 				$data['slot_date']
 			)
 		);
@@ -529,7 +568,9 @@ class InnflowManagerRooms_Controller {
 			$id = (int) $wpdb->insert_id;
 		}
 
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A );
+		do_action( 'shmpp_booking_inventory_changed', $data['room_type_id'], $data['slot_date'], $data['slot_date'] );
+
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $table, $id ), ARRAY_A );
 		return rest_ensure_response( $row );
 	}
 
@@ -548,11 +589,11 @@ class InnflowManagerRooms_Controller {
 
 	private function unique_slug( $slug ) {
 		global $wpdb;
-		$table   = InnflowManagerDatabase::table( 'room_types' );
+		$table   = ShmppDatabase::table( 'room_types' );
 		$base    = $slug ?: 'room';
 		$candidate = $base;
 		$i = 1;
-		while ( $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE slug = %s AND " . InnflowManagerTrash::alive_sql(), $candidate ) ) ) {
+		while ( $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM %i WHERE slug = %s AND deleted_at IS NULL', $table, $candidate ) ) ) {
 			$candidate = $base . '-' . $i;
 			$i++;
 		}
@@ -561,12 +602,10 @@ class InnflowManagerRooms_Controller {
 
 	private function get_amenities( $room_type_id ) {
 		global $wpdb;
-		$join = InnflowManagerDatabase::table( 'room_type_amenities' );
-		$am   = InnflowManagerDatabase::table( 'amenities' );
+		$join = ShmppDatabase::table( 'room_type_amenities' );
+		$am   = ShmppDatabase::table( 'amenities' );
 		return $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT a.* FROM {$am} a INNER JOIN {$join} j ON j.amenity_id = a.id WHERE j.room_type_id = %d AND " . InnflowManagerTrash::alive_sql( 'a' ),
-				$room_type_id
+			$wpdb->prepare( 'SELECT a.* FROM %i a INNER JOIN %i j ON j.amenity_id = a.id WHERE j.room_type_id = %d AND a.deleted_at IS NULL', $am, $join, $room_type_id
 			),
 			ARRAY_A
 		);
@@ -574,7 +613,7 @@ class InnflowManagerRooms_Controller {
 
 	private function sync_amenities( $room_type_id, $amenity_ids ) {
 		global $wpdb;
-		$table = InnflowManagerDatabase::table( 'room_type_amenities' );
+		$table = ShmppDatabase::table( 'room_type_amenities' );
 		$wpdb->delete( $table, array( 'room_type_id' => $room_type_id ) );
 		if ( ! is_array( $amenity_ids ) ) {
 			return;
@@ -592,11 +631,9 @@ class InnflowManagerRooms_Controller {
 
 	private function get_gallery( $room_type_id ) {
 		global $wpdb;
-		$table = InnflowManagerDatabase::table( 'room_gallery' );
+		$table = ShmppDatabase::table( 'room_gallery' );
 		return $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT id, image_url, sort_order FROM {$table} WHERE room_type_id = %d ORDER BY sort_order ASC, id ASC",
-				$room_type_id
+			$wpdb->prepare( 'SELECT id, image_url, sort_order FROM %i WHERE room_type_id = %d ORDER BY sort_order ASC, id ASC', $table, $room_type_id
 			),
 			ARRAY_A
 		);
@@ -604,7 +641,7 @@ class InnflowManagerRooms_Controller {
 
 	private function sync_gallery( $room_type_id, $image_urls ) {
 		global $wpdb;
-		$table = InnflowManagerDatabase::table( 'room_gallery' );
+		$table = ShmppDatabase::table( 'room_gallery' );
 		$wpdb->delete( $table, array( 'room_type_id' => $room_type_id ) );
 		if ( ! is_array( $image_urls ) ) {
 			return;
@@ -629,13 +666,11 @@ class InnflowManagerRooms_Controller {
 
 	private function ensure_slots( $room_type_id, $total_rooms, $base_price ) {
 		global $wpdb;
-		$table = InnflowManagerDatabase::table( 'booking_date_slots' );
+		$table = ShmppDatabase::table( 'booking_date_slots' );
 		for ( $i = 0; $i < 90; $i++ ) {
 			$date = gmdate( 'Y-m-d', strtotime( "+{$i} days" ) );
 			$exists = $wpdb->get_var(
-				$wpdb->prepare(
-					"SELECT id FROM {$table} WHERE room_type_id = %d AND slot_date = %s",
-					$room_type_id,
+				$wpdb->prepare( 'SELECT id FROM %i WHERE room_type_id = %d AND slot_date = %s', $table, $room_type_id,
 					$date
 				)
 			);

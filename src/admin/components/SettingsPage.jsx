@@ -51,6 +51,67 @@ export default function SettingsPage() {
           <Input label="Phone" value={form.phone || ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           <Input label="Email" value={form.email || ''} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <Input label="Address" value={form.address || ''} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+          <Select
+            label="Default frontend language"
+            value={form.frontend_language || 'en'}
+            onChange={(e) => setForm({ ...form, frontend_language: e.target.value })}
+          >
+            <option value="en">English</option>
+            <option value="es">Español (Spanish)</option>
+            <option value="fr">Français (French)</option>
+            <option value="de">Deutsch (German)</option>
+            <option value="bn">বাংলা (Bengali)</option>
+            <option value="ar">العربية (Arabic)</option>
+          </Select>
+          <p className="-mt-1 text-xs text-brand-500">
+            Guests can still switch language on the booking form; this is the default when they first visit.
+          </p>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-brand-800">Frontend primary color</label>
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                type="color"
+                className="h-10 w-14 cursor-pointer rounded border border-sand-200 bg-white p-1"
+                value={form.frontend_primary_color || '#27584c'}
+                onChange={(e) => setForm({ ...form, frontend_primary_color: e.target.value })}
+                aria-label="Frontend primary color"
+              />
+              <Input
+                label=""
+                className="w-36 font-mono text-sm"
+                value={form.frontend_primary_color || '#27584c'}
+                onChange={(e) => setForm({ ...form, frontend_primary_color: e.target.value })}
+                placeholder="#27584c"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                className="!px-2 !py-1 text-xs"
+                onClick={() => setForm({ ...form, frontend_primary_color: '#27584c' })}
+              >
+                Reset
+              </Button>
+            </div>
+            <p className="mt-1 text-xs text-brand-500">
+              Used on the public booking form (header, buttons, accents) so it can match your theme.
+            </p>
+            <div
+              className="mt-3 overflow-hidden rounded-lg border border-sand-200"
+              style={{
+                background: `linear-gradient(135deg, ${form.frontend_primary_color || '#27584c'}, ${form.frontend_primary_color || '#27584c'}cc)`,
+              }}
+            >
+              <div className="px-4 py-3 text-sm font-semibold text-white">Preview · booking header</div>
+              <div className="bg-white/95 px-4 py-3">
+                <span
+                  className="inline-flex rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
+                  style={{ backgroundColor: form.frontend_primary_color || '#27584c' }}
+                >
+                  Search rooms
+                </span>
+              </div>
+            </div>
+          </div>
           <Button
             onClick={async () => {
               const savedSettings = await api('/settings', { method: 'POST', body: form });
@@ -62,7 +123,11 @@ export default function SettingsPage() {
             Save settings
           </Button>
           {saved && <p className="text-sm text-emerald-700">Settings saved.</p>}
-          <p className="text-xs text-brand-500">Frontend shortcode: <code>[innflow_manager_search]</code></p>
+          <p className="text-xs text-brand-500">
+            Frontend shortcode: <code>[shmpp_search]</code>
+            <br />
+            Online card payments: <strong>Payment settings</strong> in the admin menu.
+          </p>
         </Card>
 
         <Card className="space-y-3 p-5">

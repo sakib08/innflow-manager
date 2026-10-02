@@ -1,9 +1,10 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-class InnflowManagerDeactivator {
+class ShmppDeactivator {
 
 	public static function deactivate() {
+		ShmppChannelSync::clear_cron();
 		flush_rewrite_rules();
 	}
 }

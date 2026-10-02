@@ -9,15 +9,18 @@ export default function Shell({ page, setPage, children }) {
     { id: 'billing', label: 'Billing' },
     { id: 'staff', label: 'Staff' },
     { id: 'restaurants', label: 'Restaurants' },
+    { id: 'channels', label: 'Channels' },
+    { id: 'channel-help', label: 'Channex help' },
     { id: 'trash', label: 'Trash' },
+    { id: 'payments', label: 'Payment settings' },
     { id: 'settings', label: 'Settings' },
   ];
 
   return (
-    <div className="ifmpp-root min-h-screen bg-gradient-to-br from-sand-50 via-white to-brand-50/40 -mx-5 px-5 py-4">
+    <div className="shmpp-root min-h-screen bg-gradient-to-br from-sand-50 via-white to-brand-50/40 -mx-5 px-5 py-4">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-sand-200 pb-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-600">InnFlow Manager</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-600">StayNexus Hotel Manager</p>
           <h2 className="font-display text-2xl font-bold text-brand-950">{cfg.settings?.hotel_name || 'Grand Hotel'}</h2>
         </div>
         <nav className="flex flex-wrap gap-1">

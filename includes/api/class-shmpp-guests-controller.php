@@ -1,12 +1,11 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted InnflowManagerDatabase::table() keys.
-// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
-class InnflowManagerGuests_Controller {
+class ShmppGuestsController {
 
-	const NS = 'innflow-manager/v1';
+	const NS = 'staynexushm/v1';
 
 	public function register_routes() {
 		register_rest_route(
@@ -16,12 +15,12 @@ class InnflowManagerGuests_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'list_guests' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_guest' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -33,17 +32,17 @@ class InnflowManagerGuests_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'get_guest' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::EDITABLE,
 					'callback'            => array( $this, 'update_guest' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::DELETABLE,
 					'callback'            => array( $this, 'delete_guest' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -52,18 +51,33 @@ class InnflowManagerGuests_Controller {
 	public function list_guests( $request ) {
 		global $wpdb;
 		$search = sanitize_text_field( $request->get_param( 'search' ) );
-		$table  = InnflowManagerDatabase::table( 'guests' );
-		$sql    = "SELECT * FROM {$table} WHERE " . InnflowManagerTrash::alive_sql();
-		$params = array();
+		$table  = ShmppDatabase::table( 'guests' );
 		if ( $search ) {
-			$like     = '%' . $wpdb->esc_like( $search ) . '%';
-			$sql     .= ' AND (first_name LIKE %s OR last_name LIKE %s OR email LIKE %s OR phone LIKE %s)';
-			$params   = array( $like, $like, $like, $like );
+			$like = '%' . $wpdb->esc_like( $search ) . '%';
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d AND (first_name LIKE %s OR last_name LIKE %s OR email LIKE %s OR phone LIKE %s) ORDER BY created_at DESC LIMIT %d',
+					$table,
+					1,
+					$like,
+					$like,
+					$like,
+					$like,
+					200
+				),
+				ARRAY_A
+			);
+		} else {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE deleted_at IS NULL AND 1 = %d ORDER BY created_at DESC LIMIT %d',
+					$table,
+					1,
+					200
+				),
+				ARRAY_A
+			);
 		}
-		$sql .= ' ORDER BY created_at DESC LIMIT 200';
-		$rows = $params
-			? $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A )
-			: $wpdb->get_results( $sql, ARRAY_A );
 		return rest_ensure_response( $rows );
 	}
 
@@ -74,8 +88,11 @@ class InnflowManagerGuests_Controller {
 			$attrs = $request->get_attributes();
 			$id    = isset( $attrs['id'] ) ? (int) $attrs['id'] : 0;
 		}
-		$guest = $wpdb->get_row(
-			$wpdb->prepare( 'SELECT * FROM ' . InnflowManagerDatabase::table( 'guests' ) . ' WHERE id = %d AND ' . InnflowManagerTrash::alive_sql(), $id ),
+		$guests_table   = ShmppDatabase::table( 'guests' );
+		$bookings_table = ShmppDatabase::table( 'bookings' );
+		$checkin_table  = ShmppDatabase::table( 'guest_checkin_checkout' );
+		$guest          = $wpdb->get_row(
+			$wpdb->prepare( 'SELECT * FROM %i WHERE id = %d AND deleted_at IS NULL', $guests_table, $id ),
 			ARRAY_A
 		);
 		if ( ! $guest ) {
@@ -83,11 +100,11 @@ class InnflowManagerGuests_Controller {
 		}
 
 		$guest['bookings'] = $wpdb->get_results(
-			$wpdb->prepare( 'SELECT * FROM ' . InnflowManagerDatabase::table( 'bookings' ) . ' WHERE guest_id = %d AND ' . InnflowManagerTrash::alive_sql() . ' ORDER BY check_in DESC', $id ),
+			$wpdb->prepare( 'SELECT * FROM %i WHERE guest_id = %d AND deleted_at IS NULL ORDER BY check_in DESC', $bookings_table, $id ),
 			ARRAY_A
 		);
 		$guest['checkins'] = $wpdb->get_results(
-			$wpdb->prepare( 'SELECT * FROM ' . InnflowManagerDatabase::table( 'guest_checkin_checkout' ) . ' WHERE guest_id = %d AND ' . InnflowManagerTrash::alive_sql(), $id ),
+			$wpdb->prepare( 'SELECT * FROM %i WHERE guest_id = %d AND deleted_at IS NULL', $checkin_table, $id ),
 			ARRAY_A
 		);
 
@@ -97,7 +114,7 @@ class InnflowManagerGuests_Controller {
 	public function create_guest( $request ) {
 		global $wpdb;
 		$data = $this->sanitize( $request );
-		$wpdb->insert( InnflowManagerDatabase::table( 'guests' ), $data );
+		$wpdb->insert( ShmppDatabase::table( 'guests' ), $data );
 		$req = new WP_REST_Request( 'GET' );
 		$req->set_param( 'id', (int) $wpdb->insert_id );
 		return $this->get_guest( $req );
@@ -106,12 +123,12 @@ class InnflowManagerGuests_Controller {
 	public function update_guest( $request ) {
 		global $wpdb;
 		$id = (int) $request['id'];
-		$wpdb->update( InnflowManagerDatabase::table( 'guests' ), $this->sanitize( $request ), array( 'id' => $id ) );
+		$wpdb->update( ShmppDatabase::table( 'guests' ), $this->sanitize( $request ), array( 'id' => $id ) );
 		return $this->get_guest( $request );
 	}
 
 	public function delete_guest( $request ) {
-		$result = InnflowManagerTrash::trash( 'guests', (int) $request['id'] );
+		$result = ShmppTrash::trash( 'guests', (int) $request['id'] );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
