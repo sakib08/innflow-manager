@@ -251,27 +251,12 @@ class ShmppBookingsController {
 		$nights   = (int) $held['nights'];
 		$subtotal = (float) $held['subtotal'];
 
-		$settings   = get_option( 'shmpp_settings', array() );
-		$tax_rate   = isset( $settings['tax_rate'] ) ? (float) $settings['tax_rate'] : 0;
-		$discount_amount = 0;
-		$discount_id     = null;
-
-		$code = sanitize_text_field( $request->get_param( 'discount_code' ) );
-		if ( $code ) {
-			$discount = $this->find_valid_discount( $code, $nights );
-			if ( $discount ) {
-				$discount_id = (int) $discount['id'];
-				if ( 'percent' === $discount['discount_type'] ) {
-					$discount_amount = $subtotal * ( (float) $discount['discount_value'] / 100 );
-				} else {
-					$discount_amount = (float) $discount['discount_value'];
-				}
-			}
-		}
-
-		$taxable = max( 0, $subtotal - $discount_amount );
-		$tax     = round( $taxable * ( $tax_rate / 100 ), 2 );
-		$total   = round( $taxable + $tax, 2 );
+		$totals          = $this->calculate_totals( $subtotal, $nights, sanitize_text_field( $request->get_param( 'discount_code' ) ) );
+		$discount_amount = $totals['discount_amount'];
+		$discount_id     = $totals['discount_id'];
+		$taxable         = $totals['taxable'];
+		$tax             = $totals['tax_amount'];
+		$total           = $totals['total'];
 
 		$wpdb->insert( ShmppDatabase::table( 'guests' ), $guest_data );
 		$guest_id = (int) $wpdb->insert_id;
@@ -559,6 +544,49 @@ class ShmppBookingsController {
 			return new WP_Error( 'invalid_code', 'Discount code is invalid or expired', array( 'status' => 400 ) );
 		}
 		return rest_ensure_response( $row );
+	}
+
+	/**
+	 * Discount, tax, and total for a stay subtotal. Checkout charges exactly this.
+	 *
+	 * @param float  $subtotal Room subtotal for the stay.
+	 * @param int    $nights   Nights in the stay.
+	 * @param string $code     Optional discount code.
+	 * @return array{discount_id:?int,discount_code:string,discount_amount:float,taxable:float,tax_rate:float,tax_amount:float,total:float}
+	 */
+	public function calculate_totals( $subtotal, $nights, $code = '' ) {
+		$settings = get_option( 'shmpp_settings', array() );
+		$tax_rate = isset( $settings['tax_rate'] ) ? (float) $settings['tax_rate'] : 0;
+
+		$discount_amount = 0.0;
+		$discount_id     = null;
+		$discount_code   = '';
+		if ( $code ) {
+			$discount = $this->find_valid_discount( $code, $nights );
+			if ( $discount ) {
+				$discount_id   = (int) $discount['id'];
+				$discount_code = (string) $discount['code'];
+				if ( 'percent' === $discount['discount_type'] ) {
+					$discount_amount = $subtotal * ( (float) $discount['discount_value'] / 100 );
+				} else {
+					$discount_amount = (float) $discount['discount_value'];
+				}
+				$discount_amount = round( min( $discount_amount, $subtotal ), 2 );
+			}
+		}
+
+		$taxable = max( 0, $subtotal - $discount_amount );
+		$tax     = round( $taxable * ( $tax_rate / 100 ), 2 );
+
+		return array(
+			'discount_id'     => $discount_id,
+			'discount_code'   => $discount_code,
+			'discount_amount' => $discount_amount,
+			'taxable'         => $taxable,
+			'tax_rate'        => $tax_rate,
+			'tax_amount'      => $tax,
+			'total'           => round( $taxable + $tax, 2 ),
+		);
 	}
 
 	private function find_valid_discount( $code, $nights ) {

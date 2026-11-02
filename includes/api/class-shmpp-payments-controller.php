@@ -23,6 +23,16 @@ class ShmppPaymentsController {
 
 		register_rest_route(
 			self::NS,
+			'/checkout/quote',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'quote' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/payments/stripe/confirm',
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
@@ -52,9 +62,32 @@ class ShmppPaymentsController {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function checkout( $request ) {
+		// Hidden form field that real guests never fill in.
+		if ( '' !== trim( (string) $request->get_param( 'hp_website' ) ) ) {
+			return new WP_Error( 'rejected', 'Could not complete the booking.', array( 'status' => 400 ) );
+		}
+
 		$payment_method = sanitize_text_field( $request->get_param( 'payment_method' ) ?: 'pay_at_hotel' );
 		if ( ! in_array( $payment_method, array( 'pay_at_hotel', 'stripe', 'manual' ), true ) ) {
 			return new WP_Error( 'invalid_payment_method', 'Invalid payment method.', array( 'status' => 400 ) );
+		}
+
+		$stay = $this->validate_public_stay( $request );
+		if ( is_wp_error( $stay ) ) {
+			return $stay;
+		}
+
+		$email = sanitize_email( (string) $request->get_param( 'email' ) );
+		if ( '' !== trim( (string) $request->get_param( 'email' ) ) && ! is_email( $email ) ) {
+			return new WP_Error( 'invalid_email', 'Please enter a valid email address.', array( 'status' => 400 ) );
+		}
+
+		if ( $this->checkout_limit_reached() ) {
+			return new WP_Error(
+				'too_many_bookings',
+				'Too many bookings were made from your network recently. Please try again later or contact the hotel.',
+				array( 'status' => 429 )
+			);
 		}
 
 		$settings = get_option( 'shmpp_settings', array() );
@@ -116,6 +149,13 @@ class ShmppPaymentsController {
 		$booking = $created->get_data();
 		if ( empty( $booking['id'] ) ) {
 			return new WP_Error( 'create_failed', 'Could not create booking.', array( 'status' => 500 ) );
+		}
+
+		$this->record_checkout();
+
+		// Stripe bookings are announced once payment succeeds, so abandoned checkouts send nothing.
+		if ( 'stripe' !== $payment_method ) {
+			ShmppEmails::send_booking_received( (int) $booking['id'] );
 		}
 
 		if ( 'pay_at_hotel' === $payment_method ) {
@@ -323,7 +363,21 @@ class ShmppPaymentsController {
 			$data['payment_reference'] = $reference;
 		}
 
+		// Stripe can confirm the same session from the browser return and the webhook at once;
+		// only the caller that flips the status to paid sends emails.
+		$newly_paid = $wpdb->query(
+			$wpdb->prepare(
+				'UPDATE %i SET payment_status = %s WHERE id = %d AND payment_status <> %s',
+				$table,
+				'paid',
+				$booking_id,
+				'paid'
+			)
+		);
 		$wpdb->update( $table, $data, array( 'id' => $booking_id ) );
+		if ( $newly_paid ) {
+			ShmppEmails::send_payment_received( $booking_id );
+		}
 
 		$bill_data = array( 'payment_status' => 'paid' );
 		if ( $reference ) {
@@ -337,6 +391,135 @@ class ShmppPaymentsController {
 				'payment_status' => 'unpaid',
 			)
 		);
+	}
+
+	/**
+	 * Price breakdown the guest will be charged, before booking.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function quote( $request ) {
+		$stay = $this->validate_public_stay( $request );
+		if ( is_wp_error( $stay ) ) {
+			return $stay;
+		}
+
+		$quote = ShmppInventory::quote( (int) $stay['room']['id'], $stay['check_in'], $stay['check_out'], $stay['rooms_count'] );
+		if ( is_wp_error( $quote ) ) {
+			return $quote;
+		}
+		if ( empty( $quote['available'] ) ) {
+			return ShmppInventory::unavailable_error( $quote );
+		}
+
+		$code     = sanitize_text_field( (string) $request->get_param( 'discount_code' ) );
+		$bookings = new ShmppBookingsController();
+		$totals   = $bookings->calculate_totals( (float) $quote['subtotal'], (int) $quote['nights'], $code );
+
+		return rest_ensure_response(
+			array(
+				'nights'          => (int) $quote['nights'],
+				'rooms_count'     => (int) $quote['rooms_count'],
+				'available_rooms' => (int) $quote['available_rooms'],
+				'subtotal'        => (float) $quote['subtotal'],
+				'discount_code'   => $totals['discount_code'],
+				'discount_valid'  => '' === $code ? null : '' !== $totals['discount_code'],
+				'discount_amount' => $totals['discount_amount'],
+				'tax_rate'        => $totals['tax_rate'],
+				'tax_amount'      => $totals['tax_amount'],
+				'total'           => $totals['total'],
+			)
+		);
+	}
+
+	/**
+	 * Checks shared by public quote and checkout: dates, room status, and guest capacity.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return array{room:array<string,mixed>,check_in:string,check_out:string,rooms_count:int}|WP_Error
+	 */
+	private function validate_public_stay( $request ) {
+		global $wpdb;
+
+		$check_in  = sanitize_text_field( (string) $request->get_param( 'check_in' ) );
+		$check_out = sanitize_text_field( (string) $request->get_param( 'check_out' ) );
+		if ( ! $this->is_valid_date( $check_in ) || ! $this->is_valid_date( $check_out ) || $check_out <= $check_in ) {
+			return new WP_Error( 'invalid_dates', 'Valid check-in and check-out dates are required.', array( 'status' => 400 ) );
+		}
+		if ( $check_in < wp_date( 'Y-m-d' ) ) {
+			return new WP_Error( 'invalid_dates', 'Check-in cannot be in the past.', array( 'status' => 400 ) );
+		}
+		$max_nights = (int) apply_filters( 'shmpp_max_stay_nights', 90 );
+		if ( ShmppInventory::nights( $check_in, $check_out ) > $max_nights ) {
+			return new WP_Error(
+				'stay_too_long',
+				sprintf( 'Online bookings are limited to %d nights. Please contact the hotel for longer stays.', $max_nights ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$room_type_id = (int) $request->get_param( 'room_type_id' );
+		$room         = $wpdb->get_row(
+			$wpdb->prepare(
+				'SELECT id, max_adults, max_children, status FROM %i WHERE id = %d AND deleted_at IS NULL',
+				ShmppDatabase::table( 'room_types' ),
+				$room_type_id
+			),
+			ARRAY_A
+		);
+		if ( ! $room || 'active' !== $room['status'] ) {
+			return new WP_Error( 'not_found', 'This room type is not available for booking.', array( 'status' => 404 ) );
+		}
+
+		$rooms_count = max( 1, (int) $request->get_param( 'rooms_count' ) );
+		$adults      = max( 1, (int) $request->get_param( 'adults' ) );
+		$children    = max( 0, (int) $request->get_param( 'children' ) );
+		if ( $adults > (int) $room['max_adults'] * $rooms_count || $children > (int) $room['max_children'] * $rooms_count ) {
+			return new WP_Error(
+				'over_capacity',
+				'Too many guests for the selected number of rooms. Add rooms or choose a larger room type.',
+				array( 'status' => 400 )
+			);
+		}
+
+		return array(
+			'room'        => $room,
+			'check_in'    => $check_in,
+			'check_out'   => $check_out,
+			'rooms_count' => $rooms_count,
+		);
+	}
+
+	private function is_valid_date( $date ) {
+		if ( ! preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', $date, $m ) ) {
+			return false;
+		}
+		return checkdate( (int) $m[2], (int) $m[3], (int) $m[1] );
+	}
+
+	/**
+	 * Per-IP cap on bookings created through the public checkout.
+	 */
+	private function checkout_limit_reached() {
+		$limit = (int) apply_filters( 'shmpp_checkout_rate_limit', 3 );
+		if ( $limit < 1 ) {
+			return false;
+		}
+		return (int) get_transient( $this->checkout_limit_key() ) >= $limit;
+	}
+
+	private function record_checkout() {
+		$key    = $this->checkout_limit_key();
+		$window = (int) apply_filters( 'shmpp_checkout_rate_window', HOUR_IN_SECONDS );
+		set_transient( $key, (int) get_transient( $key ) + 1, $window );
+	}
+
+	private function checkout_limit_key() {
+		// REMOTE_ADDR only: forwarded headers are client-controlled unless a trusted proxy rewrites them.
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+		$ip = (string) apply_filters( 'shmpp_checkout_client_ip', $ip );
+		return 'shmpp_checkout_' . md5( $ip );
 	}
 
 	/**

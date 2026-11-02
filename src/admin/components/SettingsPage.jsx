@@ -50,6 +50,10 @@ export default function SettingsPage() {
           </div>
           <Input label="Phone" value={form.phone || ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           <Input label="Email" value={form.email || ''} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          <p className="-mt-1 text-xs text-brand-500">
+            New website bookings are emailed here (the WordPress admin email is used if empty). Guests receive a
+            confirmation when they enter an email address.
+          </p>
           <Input label="Address" value={form.address || ''} onChange={(e) => setForm({ ...form, address: e.target.value })} />
           <Select
             label="Default frontend language"

@@ -24,6 +24,7 @@ class ShmppAutoloader {
 			'ShmppChannelSync'            => 'class-shmpp-channel-sync.php',
 			'ShmppStripe'                 => 'class-shmpp-stripe.php',
 			'ShmppColors'                 => 'class-shmpp-colors.php',
+			'ShmppEmails'                 => 'class-shmpp-emails.php',
 			'ShmppAdmin'                  => 'class-shmpp-admin.php',
 			'ShmppFrontend'               => 'class-shmpp-frontend.php',
 			'ShmppRestAPI'               => 'api/class-shmpp-rest-api.php',

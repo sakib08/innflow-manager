@@ -60,7 +60,9 @@ function RoomCard({
   t,
 }) {
   const pricePerNight = room.price_per_night ?? room.base_price;
-  const totalPrice = room.total_price ?? Number(room.base_price || 0) * nights * Number(stay?.rooms || 1);
+  const totalPrice =
+    room.total_with_tax ?? room.total_price ?? Number(room.base_price || 0) * nights * Number(stay?.rooms || 1);
+  const hasTax = Number(settings.tax_rate || 0) > 0;
   const photoCount = (room.gallery || []).length + (room.image_url ? 1 : 0);
 
   return (
@@ -108,12 +110,14 @@ function RoomCard({
             <div className="shrink-0 text-left sm:text-right">
               <p className="text-sm text-brand-500">
                 {money(pricePerNight, settings)} {t('perNight')}
+                {hasTax && <span className="ml-1 text-xs">{t('exclTax')}</span>}
               </p>
               {mode === 'results' && (
                 <>
                   <p className="font-display text-3xl font-bold text-brand-800">{money(totalPrice, settings)}</p>
                   <p className="text-xs text-brand-500">
                     {t(nights > 1 ? 'totalForNightsPlural' : 'totalForNights', { count: nights })}
+                    {hasTax && ` · ${t('inclTax')}`}
                   </p>
                 </>
               )}
@@ -207,6 +211,11 @@ function SearchApp() {
   const [step, setStep] = useState('browse');
   const [detailsRoom, setDetailsRoom] = useState(null);
   const [confirmingPayment, setConfirmingPayment] = useState(false);
+  const [quote, setQuote] = useState(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState('');
+  const [appliedDiscount, setAppliedDiscount] = useState('');
+  const [honeypot, setHoneypot] = useState('');
 
   const t = (key, vars) => translate(lang, key, vars);
   const rtl = isRtl(lang);
@@ -297,6 +306,40 @@ function SearchApp() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stripe return once
   }, []);
+
+  // Server-side price breakdown so the guest sees exactly what checkout will charge.
+  useEffect(() => {
+    if (step !== 'book' || !selected) return undefined;
+    let cancelled = false;
+    setQuoteLoading(true);
+    setQuoteError('');
+    api('/checkout/quote', {
+      method: 'POST',
+      body: {
+        room_type_id: selected.id,
+        check_in: query.check_in,
+        check_out: query.check_out,
+        adults: query.adults,
+        children: query.children,
+        rooms_count: query.rooms,
+        discount_code: appliedDiscount || undefined,
+      },
+    })
+      .then((data) => {
+        if (!cancelled) setQuote(data);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setQuote(null);
+        setQuoteError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setQuoteLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [step, selected, query.check_in, query.check_out, query.adults, query.children, query.rooms, appliedDiscount]);
 
   const getRoomStay = (roomId) => roomStays[roomId] || defaultStay();
 
@@ -403,8 +446,9 @@ function SearchApp() {
           adults: query.adults,
           children: query.children,
           rooms_count: query.rooms,
-          discount_code: guest.discount_code || undefined,
+          discount_code: quote && quote.discount_valid ? appliedDiscount : undefined,
           payment_method: paymentMethod,
+          hp_website: honeypot,
           ...urls,
         },
       });
@@ -431,12 +475,25 @@ function SearchApp() {
     setBooking(null);
     setManualInfo(null);
     setError('');
+    setQuote(null);
+    setAppliedDiscount('');
+    setGuest((g) => ({ ...g, discount_code: '' }));
+  };
+
+  const applyDiscount = () => setAppliedDiscount(guest.discount_code.trim());
+
+  const removeDiscount = () => {
+    setAppliedDiscount('');
+    setGuest({ ...guest, discount_code: '' });
   };
 
   const canConfirm =
     guest.first_name &&
     guest.last_name &&
-    (paymentMethod !== 'stripe' || !!guest.email);
+    (paymentMethod !== 'stripe' || !!guest.email) &&
+    !!quote &&
+    !quoteLoading &&
+    !quoteError;
 
   const detailsForModal = detailsRoom
     ? {
@@ -598,7 +655,8 @@ function SearchApp() {
             <div>
               <h2 className="font-display text-2xl font-bold">{t('guestDetails')}</h2>
               <p className="text-sm text-brand-600">
-                {selected.name} · {query.check_in} → {query.check_out} · {money(selected.total_price, settings)}
+                {selected.name} · {query.check_in} → {query.check_out}
+                {quote && !quoteLoading && <> · {money(quote.total, settings)}</>}
               </p>
             </div>
             <Button
@@ -636,11 +694,30 @@ function SearchApp() {
               value={guest.address}
               onChange={(e) => setGuest({ ...guest, address: e.target.value })}
             />
-            <Input
-              label={t('discountCode')}
-              value={guest.discount_code}
-              onChange={(e) => setGuest({ ...guest, discount_code: e.target.value })}
-            />
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <Input
+                  label={t('discountCode')}
+                  value={guest.discount_code}
+                  onChange={(e) => setGuest({ ...guest, discount_code: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      applyDiscount();
+                    }
+                  }}
+                />
+              </div>
+              {appliedDiscount && appliedDiscount === guest.discount_code.trim() ? (
+                <Button variant="ghost" onClick={removeDiscount}>
+                  {t('remove')}
+                </Button>
+              ) : (
+                <Button variant="secondary" onClick={applyDiscount} disabled={!guest.discount_code.trim()}>
+                  {t('apply')}
+                </Button>
+              )}
+            </div>
             <Select
               label={t('rooms')}
               value={query.rooms}
@@ -652,6 +729,53 @@ function SearchApp() {
                 </option>
               ))}
             </Select>
+            <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', width: 1, height: 1, overflow: 'hidden' }}>
+              <label>
+                Website
+                <input
+                  type="text"
+                  name="website"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={honeypot}
+                  onChange={(e) => setHoneypot(e.target.value)}
+                />
+              </label>
+            </div>
+          </div>
+
+          {appliedDiscount && quote && quote.discount_valid === false && !quoteLoading && (
+            <p className="mt-2 text-sm text-red-600">{t('discountInvalid')}</p>
+          )}
+
+          <div className="mt-6 rounded-xl border border-sand-200 bg-sand-50/80 p-4">
+            <h3 className="mb-2 text-sm font-semibold text-brand-900">{t('priceSummary')}</h3>
+            {quoteLoading && <p className="text-sm text-brand-600">{t('calculating')}</p>}
+            {!quoteLoading && quoteError && <p className="text-sm text-red-600">{quoteError}</p>}
+            {!quoteLoading && !quoteError && quote && (
+              <dl className="space-y-1 text-sm">
+                <div className="flex justify-between gap-4 text-brand-700">
+                  <dt>{t('subtotal')}</dt>
+                  <dd>{money(quote.subtotal, settings)}</dd>
+                </div>
+                {quote.discount_amount > 0 && (
+                  <div className="flex justify-between gap-4 text-emerald-700">
+                    <dt>{t('discount', { code: quote.discount_code })}</dt>
+                    <dd>-{money(quote.discount_amount, settings)}</dd>
+                  </div>
+                )}
+                {quote.tax_amount > 0 && (
+                  <div className="flex justify-between gap-4 text-brand-700">
+                    <dt>{t('taxLine', { rate: quote.tax_rate })}</dt>
+                    <dd>{money(quote.tax_amount, settings)}</dd>
+                  </div>
+                )}
+                <div className="flex justify-between gap-4 border-t border-sand-200 pt-2 font-semibold text-brand-950">
+                  <dt>{t('total')}</dt>
+                  <dd>{money(quote.total, settings)}</dd>
+                </div>
+              </dl>
+            )}
           </div>
 
           <fieldset className="mt-6 space-y-2">
@@ -791,7 +915,7 @@ function SearchApp() {
                   </p>
                   {step === 'results' && (
                     <p className="font-display text-2xl font-bold text-brand-800">
-                      {money(detailsForModal.total_price, settings)}
+                      {money(detailsForModal.total_with_tax ?? detailsForModal.total_price, settings)}
                     </p>
                   )}
                 </div>

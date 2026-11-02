@@ -410,27 +410,47 @@ class ShmppRoomsController {
 		if ( $nights < 1 ) {
 			return new WP_Error( 'invalid_dates', 'Valid check-in and check-out dates are required', array( 'status' => 400 ) );
 		}
+		$max_nights = (int) apply_filters( 'shmpp_max_stay_nights', 90 );
+		if ( $nights > $max_nights ) {
+			return new WP_Error(
+				'stay_too_long',
+				sprintf( 'Online bookings are limited to %d nights. Please contact the hotel for longer stays.', $max_nights ),
+				array( 'status' => 400 )
+			);
+		}
 
+		// Capacity is per room, so a multi-room stay can hold proportionally more guests.
 		$types = $wpdb->get_results(
-			$wpdb->prepare( 'SELECT * FROM %i WHERE status = \'active\' AND deleted_at IS NULL AND max_adults >= %d AND max_children >= %d', $room_table, $adults,
+			$wpdb->prepare(
+				'SELECT * FROM %i WHERE status = \'active\' AND deleted_at IS NULL AND max_adults * %d >= %d AND max_children * %d >= %d',
+				$room_table,
+				$rooms,
+				$adults,
+				$rooms,
 				$children
 			),
 			ARRAY_A
 		);
 
-		$results = array();
+		$bookings = new ShmppBookingsController();
+		$results  = array();
 		foreach ( $types as $type ) {
 			$quote = ShmppInventory::quote( (int) $type['id'], $check_in, $check_out, $rooms );
 			if ( is_wp_error( $quote ) || empty( $quote['available'] ) ) {
 				continue;
 			}
+			$totals = $bookings->calculate_totals( (float) $quote['subtotal'], (int) $quote['nights'] );
 
 			$type['amenities']       = $this->get_amenities( (int) $type['id'] );
 			$type['gallery']         = $this->get_gallery( (int) $type['id'] );
 			$type['nights']          = (int) $quote['nights'];
+			$type['rooms_count']     = (int) $quote['rooms_count'];
 			$type['available_rooms'] = (int) $quote['available_rooms'];
 			$type['total_price']     = (float) $quote['subtotal'];
 			$type['price_per_night'] = (float) $quote['price_per_night'];
+			$type['tax_rate']        = $totals['tax_rate'];
+			$type['tax_amount']      = $totals['tax_amount'];
+			$type['total_with_tax']  = $totals['total'];
 			$results[]               = $type;
 		}
 
