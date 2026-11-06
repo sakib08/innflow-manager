@@ -34,7 +34,19 @@ export default function BillingPage() {
   useEffect(load, [tab, period]);
 
   const submit = async () => {
-    await api(endpoints[tab], { method: 'POST', body: form });
+    const status = form.payment_status || (tab === 'non-border' ? 'paid' : 'unpaid');
+    if (status === 'paid' && !(form.payment_reference || '').trim()) {
+      window.alert('Payment reference is required for paid bills (cheque number, card transaction ID, transfer reference, etc.).');
+      return;
+    }
+    await api(endpoints[tab], {
+      method: 'POST',
+      body: {
+        ...form,
+        payment_status: status,
+        payment_reference: (form.payment_reference || '').trim() || undefined,
+      },
+    });
     setForm({});
     load();
   };
@@ -140,6 +152,21 @@ export default function BillingPage() {
               <Input label="Amount" type="number" value={form.amount || ''} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
             </>
           )}
+          <Select
+            label="Payment status"
+            value={form.payment_status || (tab === 'non-border' ? 'paid' : 'unpaid')}
+            onChange={(e) => setForm({ ...form, payment_status: e.target.value })}
+          >
+            <option value="unpaid">Unpaid</option>
+            <option value="paid">Paid</option>
+          </Select>
+          <Input
+            label="Payment reference"
+            value={form.payment_reference || ''}
+            onChange={(e) => setForm({ ...form, payment_reference: e.target.value })}
+            placeholder="Cheque #, card txn ID, transfer ref…"
+          />
+          <p className="text-xs text-brand-500">Required when payment status is Paid.</p>
           <Button onClick={submit}>Save bill</Button>
         </Card>
 
@@ -151,6 +178,11 @@ export default function BillingPage() {
               { key: 'bill_date', label: 'Date' },
               { key: 'total_amount', label: 'Total', render: (r) => money(r.total_amount, settings) },
               { key: 'payment_status', label: 'Payment', render: (r) => <Badge tone={r.payment_status === 'paid' ? 'success' : 'warning'}>{r.payment_status}</Badge> },
+              {
+                key: 'payment_reference',
+                label: 'Reference',
+                render: (r) => r.payment_reference || '—',
+              },
               {
                 key: 'actions',
                 label: '',

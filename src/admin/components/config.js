@@ -1,1 +1,1 @@
-export const cfg = typeof window !== 'undefined' ? window.ifmppAdmin || {} : {};
+export const cfg = typeof window !== 'undefined' ? window.shmppAdmin || {} : {};

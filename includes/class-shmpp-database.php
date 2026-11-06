@@ -1,16 +1,57 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted InnflowManagerDatabase::table() keys.
-// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
-class InnflowManagerDatabase {
+class ShmppDatabase {
 
-	const DB_VERSION = '1.5.0';
+	const DB_VERSION = '1.11.0';
 
+	/**
+	 * Allowed custom-table suffixes (never accept arbitrary caller input).
+	 *
+	 * @return string[]
+	 */
+	public static function allowed_table_suffixes() {
+		return array(
+			'room_types',
+			'amenities',
+			'room_type_amenities',
+			'room_gallery',
+			'booking_date_slots',
+			'guests',
+			'discounts',
+			'offline_payment_types',
+			'bookings',
+			'guest_checkin_checkout',
+			'room_bills',
+			'restaurants',
+			'restaurant_bills',
+			'restaurant_guest_bills',
+			'non_border_restaurant_bills',
+			'laundry_bills',
+			'damage_bills',
+			'employee_roles',
+			'employees',
+			'employee_salaries',
+			'channel_connections',
+			'channel_room_maps',
+			'channel_sync_log',
+		);
+	}
+
+	/**
+	 * Resolve a plugin table name from an allowlisted suffix.
+	 *
+	 * @param string $name Table suffix without prefix (e.g. 'bookings').
+	 * @return string|null Fully qualified table name, or null if not allowlisted.
+	 */
 	public static function table( $name ) {
 		global $wpdb;
-		return $wpdb->prefix . 'ifmpp_' . $name;
+		if ( ! is_string( $name ) || ! in_array( $name, self::allowed_table_suffixes(), true ) ) {
+			return null;
+		}
+		return $wpdb->prefix . 'shmpp_' . $name;
 	}
 
 	public static function create_tables() {
@@ -160,8 +201,16 @@ class InnflowManagerDatabase {
 			tax_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
 			total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
 			payment_status VARCHAR(30) NOT NULL DEFAULT 'pending',
+			payment_method VARCHAR(30) NOT NULL DEFAULT 'pay_at_hotel',
+			payment_reference VARCHAR(191) NULL,
 			booking_status VARCHAR(30) NOT NULL DEFAULT 'confirmed',
 			offline_payment_type_id BIGINT UNSIGNED NULL,
+			stripe_session_id VARCHAR(191) NULL,
+			stripe_payment_intent_id VARCHAR(191) NULL,
+			source VARCHAR(50) NOT NULL DEFAULT 'direct',
+			external_id VARCHAR(191) NULL,
+			external_revision_id VARCHAR(191) NULL,
+			channel_meta LONGTEXT NULL,
 			notes TEXT NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -173,6 +222,9 @@ class InnflowManagerDatabase {
 			KEY check_in (check_in),
 			KEY check_out (check_out),
 			KEY booking_status (booking_status),
+			KEY source (source),
+			KEY external_id (external_id),
+			KEY stripe_session_id (stripe_session_id),
 			KEY deleted_at (deleted_at)
 		) $charset;";
 
@@ -208,6 +260,7 @@ class InnflowManagerDatabase {
 			bill_date DATE NOT NULL,
 			payment_status VARCHAR(30) NOT NULL DEFAULT 'unpaid',
 			offline_payment_type_id BIGINT UNSIGNED NULL,
+			payment_reference VARCHAR(191) NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			deleted_at DATETIME NULL,
 			PRIMARY KEY (id),
@@ -241,6 +294,7 @@ class InnflowManagerDatabase {
 			total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
 			payment_status VARCHAR(30) NOT NULL DEFAULT 'unpaid',
 			offline_payment_type_id BIGINT UNSIGNED NULL,
+			payment_reference VARCHAR(191) NULL,
 			notes TEXT NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			deleted_at DATETIME NULL,
@@ -276,6 +330,7 @@ class InnflowManagerDatabase {
 			total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
 			payment_status VARCHAR(30) NOT NULL DEFAULT 'paid',
 			offline_payment_type_id BIGINT UNSIGNED NULL,
+			payment_reference VARCHAR(191) NULL,
 			notes TEXT NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			deleted_at DATETIME NULL,
@@ -298,6 +353,7 @@ class InnflowManagerDatabase {
 			total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
 			payment_status VARCHAR(30) NOT NULL DEFAULT 'unpaid',
 			offline_payment_type_id BIGINT UNSIGNED NULL,
+			payment_reference VARCHAR(191) NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			deleted_at DATETIME NULL,
 			PRIMARY KEY (id),
@@ -320,6 +376,7 @@ class InnflowManagerDatabase {
 			total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
 			payment_status VARCHAR(30) NOT NULL DEFAULT 'unpaid',
 			offline_payment_type_id BIGINT UNSIGNED NULL,
+			payment_reference VARCHAR(191) NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			deleted_at DATETIME NULL,
 			PRIMARY KEY (id),
@@ -375,6 +432,7 @@ class InnflowManagerDatabase {
 			payment_status VARCHAR(30) NOT NULL DEFAULT 'pending',
 			paid_at DATETIME NULL,
 			offline_payment_type_id BIGINT UNSIGNED NULL,
+			payment_reference VARCHAR(191) NULL,
 			notes TEXT NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			deleted_at DATETIME NULL,
@@ -384,30 +442,203 @@ class InnflowManagerDatabase {
 			KEY deleted_at (deleted_at)
 		) $charset;";
 
+		$tables[] = "CREATE TABLE " . self::table( 'channel_connections' ) . " (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			provider VARCHAR(50) NOT NULL DEFAULT 'channex',
+			api_key TEXT NULL,
+			property_id VARCHAR(191) NULL,
+			environment VARCHAR(20) NOT NULL DEFAULT 'staging',
+			is_active TINYINT(1) NOT NULL DEFAULT 0,
+			webhook_secret VARCHAR(64) NULL,
+			last_ari_sync_at DATETIME NULL,
+			last_booking_sync_at DATETIME NULL,
+			last_error TEXT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			KEY provider (provider),
+			KEY is_active (is_active)
+		) $charset;";
+
+		$tables[] = "CREATE TABLE " . self::table( 'channel_room_maps' ) . " (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			connection_id BIGINT UNSIGNED NOT NULL,
+			room_type_id BIGINT UNSIGNED NOT NULL,
+			external_room_type_id VARCHAR(191) NOT NULL,
+			external_rate_plan_id VARCHAR(191) NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			UNIQUE KEY connection_room (connection_id, room_type_id),
+			KEY external_room_type_id (external_room_type_id),
+			KEY connection_id (connection_id)
+		) $charset;";
+
+		$tables[] = "CREATE TABLE " . self::table( 'channel_sync_log' ) . " (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			connection_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			direction VARCHAR(20) NOT NULL DEFAULT 'out',
+			event_type VARCHAR(50) NOT NULL,
+			status VARCHAR(20) NOT NULL DEFAULT 'ok',
+			message TEXT NULL,
+			payload LONGTEXT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			KEY connection_id (connection_id),
+			KEY event_type (event_type),
+			KEY created_at (created_at)
+		) $charset;";
+
 		foreach ( $tables as $sql ) {
 			dbDelta( $sql );
 		}
 
 		self::ensure_trash_columns();
+		self::ensure_channel_columns();
+		self::ensure_stripe_columns();
+		self::ensure_payment_method_column();
+		self::ensure_payment_reference_columns();
 
-		update_option( 'ifmpp_db_version', self::DB_VERSION );
+		update_option( 'shmpp_db_version', self::DB_VERSION );
 	}
 
 	/**
-	 * Migrate legacy hb_/ifm_ tables and options to ifmpp_.
+	 * Ensure channel-related columns exist on bookings (upgrades from < 1.8.0).
+	 */
+	public static function ensure_channel_columns() {
+		global $wpdb;
+		$table = self::table( 'bookings' );
+		if ( ! $table ) {
+			return;
+		}
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( ! $exists ) {
+			return;
+		}
+
+		$columns = array(
+			'source'               => "ALTER TABLE %i ADD COLUMN source VARCHAR(50) NOT NULL DEFAULT 'direct' AFTER offline_payment_type_id, ADD KEY source (source)",
+			'external_id'          => 'ALTER TABLE %i ADD COLUMN external_id VARCHAR(191) NULL AFTER source, ADD KEY external_id (external_id)',
+			'external_revision_id' => 'ALTER TABLE %i ADD COLUMN external_revision_id VARCHAR(191) NULL AFTER external_id',
+			'channel_meta'         => 'ALTER TABLE %i ADD COLUMN channel_meta LONGTEXT NULL AFTER external_revision_id',
+		);
+
+		foreach ( $columns as $col => $sql ) {
+			$found = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, $col ) );
+			if ( empty( $found ) ) {
+				$wpdb->query( $wpdb->prepare( $sql, $table ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			}
+		}
+	}
+
+	/**
+	 * Ensure Stripe payment columns exist on bookings (upgrades from < 1.9.0).
+	 */
+	public static function ensure_stripe_columns() {
+		global $wpdb;
+		$table = self::table( 'bookings' );
+		if ( ! $table ) {
+			return;
+		}
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( ! $exists ) {
+			return;
+		}
+
+		$columns = array(
+			'stripe_session_id'        => 'ALTER TABLE %i ADD COLUMN stripe_session_id VARCHAR(191) NULL AFTER offline_payment_type_id, ADD KEY stripe_session_id (stripe_session_id)',
+			'stripe_payment_intent_id' => 'ALTER TABLE %i ADD COLUMN stripe_payment_intent_id VARCHAR(191) NULL AFTER stripe_session_id',
+		);
+
+		foreach ( $columns as $col => $sql ) {
+			$found = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, $col ) );
+			if ( empty( $found ) ) {
+				$wpdb->query( $wpdb->prepare( $sql, $table ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			}
+		}
+	}
+
+	/**
+	 * Ensure payment_method column exists on bookings (upgrades from < 1.10.0).
+	 */
+	public static function ensure_payment_method_column() {
+		global $wpdb;
+		$table = self::table( 'bookings' );
+		if ( ! $table ) {
+			return;
+		}
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( ! $exists ) {
+			return;
+		}
+
+		$found = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, 'payment_method' ) );
+		if ( empty( $found ) ) {
+			$wpdb->query(
+				$wpdb->prepare(
+					"ALTER TABLE %i ADD COLUMN payment_method VARCHAR(30) NOT NULL DEFAULT 'pay_at_hotel' AFTER payment_status",
+					$table
+				)
+			); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		}
+	}
+
+	/**
+	 * Ensure payment_reference columns exist (upgrades from < 1.11.0).
+	 */
+	public static function ensure_payment_reference_columns() {
+		global $wpdb;
+
+		$targets = array(
+			'bookings'                    => 'payment_method',
+			'room_bills'                  => 'offline_payment_type_id',
+			'restaurant_bills'            => 'offline_payment_type_id',
+			'non_border_restaurant_bills' => 'offline_payment_type_id',
+			'laundry_bills'               => 'offline_payment_type_id',
+			'damage_bills'                => 'offline_payment_type_id',
+			'employee_salaries'           => 'offline_payment_type_id',
+		);
+
+		foreach ( $targets as $suffix => $after_col ) {
+			$table = self::table( $suffix );
+			if ( ! $table ) {
+				continue;
+			}
+			$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+			if ( ! $exists ) {
+				continue;
+			}
+			$found = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, 'payment_reference' ) );
+			if ( empty( $found ) ) {
+				$wpdb->query(
+					$wpdb->prepare(
+						'ALTER TABLE %i ADD COLUMN payment_reference VARCHAR(191) NULL AFTER ' . $after_col, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+						$table
+					)
+				);
+			}
+		}
+	}
+
+	/**
+	 * Migrate legacy hb_/ifm_/ifmpp_ tables and options to shmpp_.
 	 */
 	public static function migrate_legacy() {
 		global $wpdb;
 
 		$option_map = array(
-			'hb_settings'      => 'ifmpp_settings',
-			'ifm_settings'     => 'ifmpp_settings',
-			'hb_db_version'    => 'ifmpp_db_version',
-			'ifm_db_version'   => 'ifmpp_db_version',
-			'hb_export_token'  => 'ifmpp_export_token',
-			'ifm_export_token' => 'ifmpp_export_token',
-			'hb_demo_seeded'   => 'ifmpp_demo_seeded',
-			'ifm_demo_seeded'  => 'ifmpp_demo_seeded',
+			'hb_settings'       => 'shmpp_settings',
+			'ifm_settings'      => 'shmpp_settings',
+			'ifmpp_settings'    => 'shmpp_settings',
+			'hb_db_version'     => 'shmpp_db_version',
+			'ifm_db_version'    => 'shmpp_db_version',
+			'ifmpp_db_version'  => 'shmpp_db_version',
+			'hb_export_token'   => 'shmpp_export_token',
+			'ifm_export_token'  => 'shmpp_export_token',
+			'ifmpp_export_token'=> 'shmpp_export_token',
+			'hb_demo_seeded'    => 'shmpp_demo_seeded',
+			'ifm_demo_seeded'   => 'shmpp_demo_seeded',
+			'ifmpp_demo_seeded' => 'shmpp_demo_seeded',
 		);
 
 		foreach ( $option_map as $old => $new ) {
@@ -443,46 +674,70 @@ class InnflowManagerDatabase {
 			'employee_salaries',
 		);
 
-		$legacy_prefixes = array( 'ifm_', 'hb_' );
+		$legacy_prefixes = array( 'ifmpp_', 'ifm_', 'hb_' );
 
 		foreach ( $suffixes as $suffix ) {
-			$new = $wpdb->prefix . 'ifmpp_' . $suffix;
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$new = self::safe_identifier( $wpdb->prefix . 'shmpp_' . $suffix );
+			if ( ! $new ) {
+				continue;
+			}
 			$new_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $new ) );
 
 			foreach ( $legacy_prefixes as $legacy_prefix ) {
-				$old = $wpdb->prefix . $legacy_prefix . $suffix;
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$old = self::safe_identifier( $wpdb->prefix . $legacy_prefix . $suffix );
+				if ( ! $old ) {
+					continue;
+				}
 				$old_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $old ) );
 				if ( ! $old_exists ) {
 					continue;
 				}
 
 				if ( $new_exists ) {
-					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-					$old_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$old}`" );
+					$old_count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE 1 = %d', $old, 1 ) );
 					if ( $old_count > 0 ) {
 						// Prefer legacy data over newly created empty/demo ifmpp_ tables.
-						// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-						$wpdb->query( "DROP TABLE `{$new}`" );
-						// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-						$wpdb->query( "RENAME TABLE `{$old}` TO `{$new}`" );
+						$wpdb->query( $wpdb->prepare( 'DROP TABLE %i', $new ) );
+						$wpdb->query( $wpdb->prepare( 'RENAME TABLE %i TO %i', $old, $new ) );
 						$new_exists = true;
 					}
 					continue;
 				}
 
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$wpdb->query( "RENAME TABLE `{$old}` TO `{$new}`" );
+				$wpdb->query( $wpdb->prepare( 'RENAME TABLE %i TO %i', $old, $new ) );
 				$new_exists = true;
 			}
 		}
 
-		// Update shortcodes in content.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// Update shortcodes in content (legacy tag, then the pre-rename shmpp_search tag).
 		$wpdb->query(
-			"UPDATE {$wpdb->posts} SET post_content = REPLACE(post_content, '[hotel_booking_search', '[innflow_manager_search') WHERE post_content LIKE '%[hotel_booking_search%'"
+			$wpdb->prepare( 'UPDATE %i SET post_content = REPLACE(post_content, %s, %s) WHERE post_content LIKE %s', $wpdb->posts, '[hotel_booking_search',
+				'[shmpp_search',
+				'%[hotel_booking_search%'
+			)
 		);
+		$wpdb->query(
+			$wpdb->prepare( 'UPDATE %i SET post_content = REPLACE(post_content, %s, %s) WHERE post_content LIKE %s', $wpdb->posts, '[staynexus_hotel_manager_search',
+				'[shmpp_search',
+				'%[staynexus_hotel_manager_search%'
+			)
+		);
+	}
+
+	/**
+	 * Validate a table identifier before it is passed to %i placeholders.
+	 *
+	 * Identifiers built from variables must be allow-listed against a strict pattern
+	 * before use. Returns the identifier unchanged if safe, or null if it is not.
+	 *
+	 * @param string $identifier Fully-qualified table name to validate.
+	 * @return string|null
+	 */
+	private static function safe_identifier( $identifier ) {
+		if ( is_string( $identifier ) && preg_match( '/^[A-Za-z0-9_]+$/', $identifier ) ) {
+			return $identifier;
+		}
+		return null;
 	}
 
 	/**
@@ -512,16 +767,13 @@ class InnflowManagerDatabase {
 
 		foreach ( $tables as $name ) {
 			$table = self::table( $name );
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
 			if ( ! $exists ) {
 				continue;
 			}
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-			$col = $wpdb->get_results( $wpdb->prepare( "SHOW COLUMNS FROM {$table} LIKE %s", 'deleted_at' ) );
+			$col = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, 'deleted_at' ) );
 			if ( empty( $col ) ) {
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$wpdb->query( "ALTER TABLE {$table} ADD COLUMN deleted_at DATETIME NULL, ADD KEY deleted_at (deleted_at)" );
+					$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i ADD COLUMN deleted_at DATETIME NULL, ADD KEY deleted_at (deleted_at)', $table ) );
 			}
 		}
 	}
@@ -530,8 +782,7 @@ class InnflowManagerDatabase {
 		global $wpdb;
 
 		$payments = self::table( 'offline_payment_types' );
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-		$count    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$payments}" );
+		$count    = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE 1 = %d', $payments, 1 ) );
 		if ( 0 === $count ) {
 			$defaults = array(
 				array( 'Cash', 'cash', 'Cash payment at front desk' ),
@@ -554,8 +805,7 @@ class InnflowManagerDatabase {
 		}
 
 		$roles = self::table( 'employee_roles' );
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$roles}" );
+		$count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE 1 = %d', $roles, 1 ) );
 		if ( 0 === $count ) {
 			$defaults = array(
 				array( 'Manager', 'manager', 'Hotel manager' ),
@@ -578,10 +828,10 @@ class InnflowManagerDatabase {
 			}
 		}
 
-		$settings = get_option( 'ifmpp_settings' );
+		$settings = get_option( 'shmpp_settings' );
 		if ( ! $settings ) {
 			update_option(
-				'ifmpp_settings',
+				'shmpp_settings',
 				array(
 					'hotel_name'      => 'Aurora Bay Resort & Spa',
 					'currency'        => 'USD',
@@ -610,16 +860,15 @@ class InnflowManagerDatabase {
 		global $wpdb;
 
 		$rooms_table = self::table( 'room_types' );
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-		if ( ! $force && (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rooms_table}" ) > 0 ) {
+		if ( ! $force && (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE 1 = %d', $rooms_table, 1 ) ) > 0 ) {
 			return false;
 		}
 
 		// Align hotel branding with demo content when still on defaults / empty.
-		$settings = get_option( 'ifmpp_settings', array() );
+		$settings = get_option( 'shmpp_settings', array() );
 		if ( empty( $settings['hotel_name'] ) || 'Grand Hotel' === $settings['hotel_name'] ) {
 			update_option(
-				'ifmpp_settings',
+				'shmpp_settings',
 				array_merge(
 					is_array( $settings ) ? $settings : array(),
 					array(
@@ -639,12 +888,10 @@ class InnflowManagerDatabase {
 
 		$cash_table = self::table( 'offline_payment_types' );
 		$cash_id    = (int) $wpdb->get_var(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-			$wpdb->prepare( "SELECT id FROM {$cash_table} WHERE slug = %s", 'cash' )
+			$wpdb->prepare( 'SELECT id FROM %i WHERE slug = %s', $cash_table, 'cash' )
 		);
 		$card_id = (int) $wpdb->get_var(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-			$wpdb->prepare( "SELECT id FROM {$cash_table} WHERE slug = %s", 'card' )
+			$wpdb->prepare( 'SELECT id FROM %i WHERE slug = %s', $cash_table, 'card' )
 		);
 
 		// Amenities.
@@ -675,7 +922,7 @@ class InnflowManagerDatabase {
 			$amenity_ids[ $a[1] ] = (int) $wpdb->insert_id;
 		}
 
-		// Room types with list + gallery images (Unsplash).
+		// Room types (images left empty — upload locally via Media Library).
 		$room_defs = array(
 			array(
 				'name'         => 'Harbor Deluxe',
@@ -685,12 +932,8 @@ class InnflowManagerDatabase {
 				'max_adults'   => 2,
 				'max_children' => 1,
 				'total_rooms'  => 18,
-				'image_url'    => 'https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=800&q=80',
-				'gallery'      => array(
-					'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=1200&q=80',
-				),
+				'image_url'    => '',
+				'gallery'      => array(),
 				'amenities'    => array( 'wifi', 'ac', 'bed', 'tv', 'coffee', 'safe' ),
 			),
 			array(
@@ -701,13 +944,8 @@ class InnflowManagerDatabase {
 				'max_adults'   => 3,
 				'max_children' => 2,
 				'total_rooms'  => 8,
-				'image_url'    => 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
-				'gallery'      => array(
-					'https://images.unsplash.com/photo-1578683010236-d716f9a3f461?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=1200&q=80',
-				),
+				'image_url'    => '',
+				'gallery'      => array(),
 				'amenities'    => array( 'wifi', 'ac', 'bed', 'ocean', 'minibar', 'bath', 'balcony', 'tv', 'coffee', 'safe', 'service' ),
 			),
 			array(
@@ -718,12 +956,8 @@ class InnflowManagerDatabase {
 				'max_adults'   => 4,
 				'max_children' => 3,
 				'total_rooms'  => 12,
-				'image_url'    => 'https://images.unsplash.com/photo-1591088398332-8a7791972843?auto=format&fit=crop&w=800&q=80',
-				'gallery'      => array(
-					'https://images.unsplash.com/photo-1560185127-6ed189bf02f4?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1595576508898-0ad5c879a061?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1631049552057-403cdb8f0658?auto=format&fit=crop&w=1200&q=80',
-				),
+				'image_url'    => '',
+				'gallery'      => array(),
 				'amenities'    => array( 'wifi', 'ac', 'tv', 'coffee', 'desk', 'safe' ),
 			),
 			array(
@@ -734,11 +968,8 @@ class InnflowManagerDatabase {
 				'max_adults'   => 2,
 				'max_children' => 0,
 				'total_rooms'  => 10,
-				'image_url'    => 'https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=800&q=80',
-				'gallery'      => array(
-					'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=1200&q=80',
-				),
+				'image_url'    => '',
+				'gallery'      => array(),
 				'amenities'    => array( 'wifi', 'ac', 'desk', 'tv', 'coffee', 'safe' ),
 			),
 			array(
@@ -749,13 +980,8 @@ class InnflowManagerDatabase {
 				'max_adults'   => 4,
 				'max_children' => 2,
 				'total_rooms'  => 2,
-				'image_url'    => 'https://images.unsplash.com/photo-1578683010236-d716f9a3f461?auto=format&fit=crop&w=800&q=80',
-				'gallery'      => array(
-					'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=1200&q=80',
-					'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80',
-				),
+				'image_url'    => '',
+				'gallery'      => array(),
 				'amenities'    => array( 'wifi', 'ac', 'bed', 'ocean', 'minibar', 'bath', 'balcony', 'tv', 'coffee', 'safe', 'service', 'desk' ),
 			),
 		);
@@ -858,8 +1084,7 @@ class InnflowManagerDatabase {
 		);
 		$discounts_table = self::table( 'discounts' );
 		$discount_id     = (int) $wpdb->get_var(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-			$wpdb->prepare( "SELECT id FROM {$discounts_table} WHERE code = %s", 'WELCOME10' )
+			$wpdb->prepare( 'SELECT id FROM %i WHERE code = %s', $discounts_table, 'WELCOME10' )
 		);
 
 		// Restaurants.
@@ -886,8 +1111,7 @@ class InnflowManagerDatabase {
 		// Employees.
 		$role_map = array();
 		$roles_table = self::table( 'employee_roles' );
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-		$roles_rows = $wpdb->get_results( "SELECT id, slug FROM {$roles_table}", ARRAY_A );
+		$roles_rows = $wpdb->get_results( $wpdb->prepare( 'SELECT id, slug FROM %i WHERE 1 = %d', $roles_table, 1 ), ARRAY_A );
 		foreach ( $roles_rows as $rr ) {
 			$role_map[ $rr['slug'] ] = (int) $rr['id'];
 		}
@@ -923,8 +1147,7 @@ class InnflowManagerDatabase {
 			$employee_ids[] = $eid;
 
 			$bank_id = (int) $wpdb->get_var(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-				$wpdb->prepare( "SELECT id FROM {$cash_table} WHERE slug = %s", 'bank-transfer' )
+					$wpdb->prepare( 'SELECT id FROM %i WHERE slug = %s', $cash_table, 'bank-transfer' )
 			);
 
 			foreach ( array( $month_prev, $month_now ) as $mi => $month ) {
@@ -998,8 +1221,7 @@ class InnflowManagerDatabase {
 		foreach ( $booking_defs as $b ) {
 			$guest_id = $guest_ids[ $b[0] ];
 			$room_id  = $room_ids[ $b[1] ];
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-			$room     = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$rooms_table} WHERE id = %d", $room_id ), ARRAY_A );
+			$room     = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $rooms_table, $room_id ), ARRAY_A );
 			$check_in  = gmdate( 'Y-m-d', strtotime( $b[2] . ' days' ) );
 			$check_out = gmdate( 'Y-m-d', strtotime( $b[3] . ' days' ) );
 			$nights    = max( 1, (int) ( ( strtotime( $check_out ) - strtotime( $check_in ) ) / DAY_IN_SECONDS ) );
@@ -1008,7 +1230,7 @@ class InnflowManagerDatabase {
 			$taxable   = max( 0, $subtotal - $disc_amt );
 			$tax       = round( $taxable * ( $tax_rate / 100 ), 2 );
 			$total     = $taxable + $tax;
-			$code      = 'IFM-' . strtoupper( substr( md5( $guest_id . $check_in . $room_id ), 0, 8 ) );
+			$code      = 'SHM-' . strtoupper( substr( md5( $guest_id . $check_in . $room_id ), 0, 8 ) );
 
 			$wpdb->insert(
 				self::table( 'bookings' ),
@@ -1080,10 +1302,7 @@ class InnflowManagerDatabase {
 		$in_house_guest = $guest_ids[2];
 		$bookings_table = self::table( 'bookings' );
 		$in_house_book  = (int) $wpdb->get_var(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-			$wpdb->prepare(
-				"SELECT id FROM {$bookings_table} WHERE guest_id = %d ORDER BY id DESC LIMIT 1",
-				$in_house_guest
+			$wpdb->prepare( 'SELECT id FROM %i WHERE guest_id = %d ORDER BY id DESC LIMIT 1', $bookings_table, $in_house_guest
 			)
 		);
 
@@ -1162,10 +1381,7 @@ class InnflowManagerDatabase {
 
 		$past_guest = $guest_ids[0];
 		$past_book = (int) $wpdb->get_var(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from self::table().
-			$wpdb->prepare(
-				"SELECT id FROM {$bookings_table} WHERE guest_id = %d ORDER BY id ASC LIMIT 1",
-				$past_guest
+			$wpdb->prepare( 'SELECT id FROM %i WHERE guest_id = %d ORDER BY id ASC LIMIT 1', $bookings_table, $past_guest
 			)
 		);
 		$wpdb->insert(
@@ -1184,7 +1400,7 @@ class InnflowManagerDatabase {
 			)
 		);
 
-		update_option( 'ifmpp_demo_seeded', 1 );
+		update_option( 'shmpp_demo_seeded', 1 );
 		return true;
 	}
 }

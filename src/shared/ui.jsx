@@ -283,7 +283,7 @@ export function Modal({ open, onClose, children, className }) {
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
-        className={clsx('ifmpp-root max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl', className)}
+        className={clsx('shmpp-root max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl', className)}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

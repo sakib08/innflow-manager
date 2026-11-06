@@ -5,7 +5,7 @@ defined( 'ABSPATH' ) || exit;
  * Minimal dependency-free XLSX (Office Open XML) writer.
  * Produces a single-sheet workbook readable by Excel, Google Sheets and LibreOffice.
  */
-class InnflowManagerXlsx_Writer {
+class ShmppXlsxWriter {
 
 	private $rows = array();
 
@@ -18,7 +18,7 @@ class InnflowManagerXlsx_Writer {
 	}
 
 	public function output() {
-		$tmp = wp_tempnam( 'ifmpp-export.xlsx' );
+		$tmp = wp_tempnam( 'shmpp-export.xlsx' );
 		$zip = new ZipArchive();
 		$zip->open( $tmp, ZipArchive::OVERWRITE );
 

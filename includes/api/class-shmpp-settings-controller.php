@@ -1,12 +1,11 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-// Custom tables: table names cannot use prepare placeholders; queries are built from trusted InnflowManagerDatabase::table() keys.
-// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
-class InnflowManagerSettings_Controller {
+class ShmppSettingsController {
 
-	const NS = 'innflow-manager/v1';
+	const NS = 'staynexushm/v1';
 
 	public function register_routes() {
 		register_rest_route(
@@ -16,12 +15,12 @@ class InnflowManagerSettings_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'get_settings' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'save_settings' ),
-					'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+					'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 				),
 			)
 		);
@@ -32,20 +31,21 @@ class InnflowManagerSettings_Controller {
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'seed_demo' ),
-				'permission_callback' => array( 'InnflowManagerRest_API', 'permission_manage' ),
+				'permission_callback' => array( 'ShmppRestAPI', 'permission_manage' ),
 			)
 		);
 	}
 
 	public function get_settings() {
-		$settings = get_option( 'ifmpp_settings', array() );
+		$settings = get_option( 'shmpp_settings', array() );
+		$settings['stripe_webhook_url'] = rest_url( self::NS . '/payments/stripe/webhook' );
 		return rest_ensure_response( $settings );
 	}
 
 	public function seed_demo() {
 		global $wpdb;
-		$rooms = InnflowManagerDatabase::table( 'room_types' );
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rooms}" );
+		$rooms = ShmppDatabase::table( 'room_types' );
+		$count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE 1 = %d', $rooms, 1 ) );
 		if ( $count > 0 ) {
 			return new WP_Error(
 				'not_empty',
@@ -55,8 +55,8 @@ class InnflowManagerSettings_Controller {
 		}
 
 		// seed_defaults() also loads demo content when room types are empty.
-		InnflowManagerDatabase::seed_defaults();
-		$after = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rooms}" );
+		ShmppDatabase::seed_defaults();
+		$after = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE 1 = %d', $rooms, 1 ) );
 
 		return rest_ensure_response(
 			array(
@@ -69,7 +69,7 @@ class InnflowManagerSettings_Controller {
 	}
 
 	public function save_settings( $request ) {
-		$current = get_option( 'ifmpp_settings', array() );
+		$current = get_option( 'shmpp_settings', array() );
 		$incoming = $request->get_json_params();
 		if ( ! is_array( $incoming ) ) {
 			$incoming = $request->get_params();
@@ -87,6 +87,15 @@ class InnflowManagerSettings_Controller {
 			'address',
 			'phone',
 			'email',
+			'stripe_enabled',
+			'stripe_publishable_key',
+			'stripe_secret_key',
+			'stripe_webhook_secret',
+			'manual_payment_enabled',
+			'manual_payment_title',
+			'manual_payment_instructions',
+			'frontend_primary_color',
+			'frontend_language',
 		);
 
 		foreach ( $allowed as $key ) {
@@ -96,14 +105,24 @@ class InnflowManagerSettings_Controller {
 			$value = $incoming[ $key ];
 			if ( in_array( $key, array( 'tax_rate', 'booking_page_id' ), true ) ) {
 				$current[ $key ] = (float) $value;
-			} elseif ( 'enable_frontend' === $key ) {
+			} elseif ( in_array( $key, array( 'enable_frontend', 'stripe_enabled', 'manual_payment_enabled' ), true ) ) {
 				$current[ $key ] = (bool) $value;
+			} elseif ( 'manual_payment_instructions' === $key ) {
+				$current[ $key ] = sanitize_textarea_field( $value );
+			} elseif ( 'frontend_primary_color' === $key ) {
+				$hex = ShmppColors::sanitize_hex( $value );
+				$current[ $key ] = $hex ? $hex : ShmppColors::DEFAULT_PRIMARY;
+			} elseif ( 'frontend_language' === $key ) {
+				$lang = sanitize_key( $value );
+				$allowed_langs = array( 'en', 'es', 'fr', 'de', 'bn', 'ar' );
+				$current[ $key ] = in_array( $lang, $allowed_langs, true ) ? $lang : 'en';
 			} else {
 				$current[ $key ] = sanitize_text_field( $value );
 			}
 		}
 
-		update_option( 'ifmpp_settings', $current );
+		update_option( 'shmpp_settings', $current );
+		$current['stripe_webhook_url'] = rest_url( self::NS . '/payments/stripe/webhook' );
 		return rest_ensure_response( $current );
 	}
 }
